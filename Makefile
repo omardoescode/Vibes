@@ -3,7 +3,11 @@ ifneq (,$(wildcard .env))
 	export
 endif
 
-.PHONY: backend/dev backend/init_db backend/close_db
+.PHONY: backend/install backend/dev backend/init_db backend/close_db
+
+backend/install:
+	cd src/backend; \
+	./mvnw clean install
 
 backend/dev:
 	cd src/backend; \
