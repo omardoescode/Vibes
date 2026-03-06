@@ -1,3 +1,6 @@
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 public enum WebSocketManager {
     INSTANCE;
 
