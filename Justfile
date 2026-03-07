@@ -1,5 +1,31 @@
 set dotenv-load := true
 
+# ── Frontend ──────────────────────────────────────────────────────────────────
+
+[group("frontend")]
+[working-directory('src/frontend')]
+frontend_install:
+    npm install
+
+[group("frontend")]
+[working-directory('src/frontend')]
+frontend_dev:
+    npm run dev
+
+[group("frontend")]
+[working-directory('src/frontend')]
+frontend_build:
+    npm run build
+
+# ── Combined ──────────────────────────────────────────────────────────────────
+
+# Start backend + frontend in parallel (requires just 1.14+)
+[group("dev")]
+dev:
+    just backend_dev & just frontend_dev
+
+# ── Backend ───────────────────────────────────────────────────────────────────
+
 [group("backend")]
 [working-directory('src/backend')]
 @backend_install:

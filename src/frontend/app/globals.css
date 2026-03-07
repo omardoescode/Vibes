@@ -1,0 +1,182 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  /* Yellow / amber palette */
+  --yellow-50:  #fffde7;
+  --yellow-100: #fff9c4;
+  --yellow-200: #fff176;
+  --yellow-300: #ffee58;
+  --yellow-400: #ffca28;
+  --yellow-500: #f9c22e;   /* primary accent */
+  --yellow-600: #e5a800;
+  --yellow-700: #b07d00;
+  --yellow-800: #7a5500;
+  --yellow-900: #4a3200;
+
+  /* Accent */
+  --accent:     #e5a800;   /* deep golden yellow — readable on light bg */
+  --accent-2:   #b07d00;   /* darker gold */
+  --accent-glow:#f9c22e;
+  --pop:        #c0390a;   /* burnt orange/red for errors — readable on light */
+
+  /* Surfaces — warm light */
+  --bg:         #fffdf0;   /* warm off-white parchment */
+  --bg-card:    #fffae0;   /* slightly richer cream */
+  --bg-hover:   #fff3b0;   /* pale yellow hover */
+  --border:     #e5c800;   /* bright gold border */
+
+  /* Text */
+  --text:       #1a1400;   /* near-black warm */
+  --text-muted: #7a6010;   /* medium amber-brown */
+
+  /* Pixel / hard shadows — offset in dark amber */
+  --shadow:     3px 3px 0px #b07d00;
+  --shadow-md:  4px 4px 0px #e5a800;
+  --shadow-lg:  6px 6px 0px #f9c22e;
+
+  /* Radii — sharper for game aesthetic */
+  --radius:     6px;
+  --radius-sm:  4px;
+  --radius-lg:  8px;
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-display: 'Press Start 2P', monospace;
+  --font-body:    'Rajdhani', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .pixel {
+  font-family: 'Press Start 2P', monospace;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+/* ── Scanline overlay on bg for CRT game feel ───────────────────────────── */
+body::before {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(180,120,0,0.03) 2px,
+    rgba(180,120,0,0.03) 4px
+  );
+  z-index: 9999;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; }
+::-webkit-scrollbar-track  { background: var(--bg); }
+::-webkit-scrollbar-thumb  { background: var(--yellow-400); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--yellow-600); }
+
+/* ── Dot / pixel grid background ────────────────────────────────────────── */
+.dot-bg {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(229,200,0,0.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(229,200,0,0.25) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── Card — flat with hard pixel border + shadow ────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Glow utility ───────────────────────────────────────────────────────── */
+.glow {
+  box-shadow: 0 0 16px 4px rgba(229, 168, 0, 0.35);
+}
+
+/* ── Pixel button base ──────────────────────────────────────────────────── */
+.btn-pixel {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  color: #0d0d0d;
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.btn-pixel:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-lg);
+}
+.btn-pixel:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes pixelIn {
+  0%   { opacity: 0; transform: scale(0.9) translateY(8px); clip-path: inset(100% 0 0 0); }
+  60%  { clip-path: inset(0% 0 0 0); transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes bounceIn {
+  0%   { opacity: 0; transform: scale(0.8) translateY(12px); }
+  60%  { transform: scale(1.05) translateY(-4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.85); }
+  65%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(229,168,0,0.25); }
+  50%       { box-shadow: 0 0 20px 6px rgba(229,168,0,0.55); }
+}
+
+@keyframes marchingAnts {
+  to { stroke-dashoffset: -20; }
+}
+
+.animate-bounce-in  { animation: bounceIn 0.35s cubic-bezier(.36,.07,.19,.97) both; }
+.animate-slide-up   { animation: slideUp 0.24s ease both; }
+.animate-pop-in     { animation: popIn 0.2s ease both; }
+.animate-pixel-in   { animation: pixelIn 0.3s steps(4) both; }
+.animate-blink      { animation: blink 1s step-start infinite; }
+.animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
