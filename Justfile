@@ -22,10 +22,10 @@ backend_dev:
 db_init:
     docker run -d \
         --name vibes-postgres \
-        -e POSTGRES_DB=mydb \
+        -e POSTGRES_DB=${DB_NAME} \
         -e POSTGRES_USER=${DB_USERNAME} \
         -e POSTGRES_PASSWORD=${DB_PASSWORD} \
-        -p 5432:5432 \
+        -p ${DB_PORT}:${DB_PORT} \
         postgres:18
 
 [group("db")]
@@ -36,3 +36,22 @@ db_close:
 [group("db")]
 db_logs:
     docker logs vibes-postgres
+
+[group("minio")]
+minio_init:
+    docker run -d \
+        --name vibes-minio \
+        -e MINIO_ROOT_USER=${MINIO_ROOT_USER} \
+        -e MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD} \
+        -p 9000:9000 \
+        -p 9001:9001 \
+        minio/minio:latest server /data --console-address ":9001"
+
+[group("minio")]
+minio_close:
+    docker stop vibes-minio
+    docker rm vibes-minio
+
+[group("minio")]
+minio_logs:
+    docker logs vibes-minio
