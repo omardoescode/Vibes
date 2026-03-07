@@ -1,10 +1,12 @@
-package com.vibes.app.modules.health.controllers;
+package com.vibes.app.modules.auth.controllers;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
-@RestController
+@RestController("authHealthController")
+@RequestMapping("/auth")
 public class HealthController {
 
   @GetMapping("/health")
