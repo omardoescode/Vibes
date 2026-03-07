@@ -16,7 +16,7 @@ public class FileController {
         this.storageFactory = storageFactory;
     }
 
-    @GetMapping("/profiles/view/{fileId}")
+    @GetMapping("/profiles/view/{fileId:.+}")
     public ResponseEntity<byte[]> viewProfilePicture(@PathVariable String fileId) {
         try {
             byte[] data = storageFactory.createProfilePictureStore().getProfilePicture(fileId);
@@ -30,7 +30,7 @@ public class FileController {
         }
     }
 
-    @GetMapping("/files/download/{fileId}")
+    @GetMapping("/files/download/{fileId:.+}")
     public ResponseEntity<byte[]> downloadFile(@PathVariable String fileId) {
         try {
             byte[] data = storageFactory.createFileStore().downloadFile(fileId);
@@ -38,20 +38,6 @@ public class FileController {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             headers.setContentDispositionFormData("attachment", fileId);
-            return new ResponseEntity<>(data, headers, HttpStatus.OK);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-    }
-
-    @GetMapping("/attachments/view/{fileId}")
-    public ResponseEntity<byte[]> viewAttachment(@PathVariable String fileId) {
-        try {
-            byte[] data = storageFactory.createAttachmentStore().getAttachment(fileId);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("inline", fileId);
             return new ResponseEntity<>(data, headers, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);

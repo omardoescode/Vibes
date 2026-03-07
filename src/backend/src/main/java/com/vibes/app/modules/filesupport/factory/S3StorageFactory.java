@@ -7,6 +7,4 @@ public class S3StorageFactory implements AbstractStorageFactory {
     public FileStore createFileStore() { return new S3FileStore(); }
     @Override
     public ProfilePictureStore createProfilePictureStore() { return new S3ProfilePictureStore(); }
-    @Override
-    public AttachmentStore createAttachmentStore() { return new S3AttachmentStore(); }
 }

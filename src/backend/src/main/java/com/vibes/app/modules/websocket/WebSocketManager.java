@@ -1,20 +1,33 @@
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+package com.vibes.app.modules.websocket;
 
-public enum WebSocketManager {
-    INSTANCE;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-    private Map<String, Object> sockets = new ConcurrentHashMap<>();
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketManager implements WebSocketMessageBrokerConfigurer {
 
-    public void addWebSocket(String userId, Object socket) {
-        sockets.put(userId, socket);
+    private final UserIdHandshakeHandler userIdHandshakeHandler;
+
+    public WebSocketManager(UserIdHandshakeHandler userIdHandshakeHandler) {
+        this.userIdHandshakeHandler = userIdHandshakeHandler;
     }
 
-    public Object getWebSocket(String userId) {
-        return sockets.get(userId);
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        registry.enableSimpleBroker("/topic", "/queue");
+        registry.setApplicationDestinationPrefixes("/app");
+        registry.setUserDestinationPrefix("/user");
     }
 
-    public void removeWebSocket(String userId) {
-        sockets.remove(userId);
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws")
+                .setHandshakeHandler(userIdHandshakeHandler)
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
     }
 }

@@ -3,37 +3,51 @@ package com.vibes.app.modules.chat.private_chat;
 import jakarta.persistence.*;
 import com.vibes.app.modules.chat.ChatSettings;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "chat_settings")
 public class PrivateChatSettings implements ChatSettings {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    private Long chatId;
-    private boolean notificationsEnabled;
+  @Column(nullable = false)
+  private UUID chatId;
 
-    @Override
-    public void changeSettings() {
-        System.out.println("Changing private chat settings");
-    }
+  private boolean notificationsEnabled = true;
 
-    @Override
-    public void enableNotifications() {
-        this.notificationsEnabled = true;
-        System.out.println("Notifications enabled");
-    }
+  public PrivateChatSettings() {
+  }
 
-    @Override
-    public void disableNotifications() {
-        this.notificationsEnabled = false;
-        System.out.println("Notifications disabled");
-    }
+  @Override
+  public void enableNotifications() {
+    this.notificationsEnabled = true;
+  }
 
-    public Long getId() { return id; }
-    public Long getChatId() { return chatId; }
-    public void setChatId(Long chatId) { this.chatId = chatId; }
-    public boolean isNotificationsEnabled() { return notificationsEnabled; }
-    public void setNotificationsEnabled(boolean notificationsEnabled) { this.notificationsEnabled = notificationsEnabled; }
+  @Override
+  public void disableNotifications() {
+    this.notificationsEnabled = false;
+  }
+
+  public Long getId() {
+    return id;
+  }
+
+  public UUID getChatId() {
+    return chatId;
+  }
+
+  public void setChatId(UUID chatId) {
+    this.chatId = chatId;
+  }
+
+  public boolean isNotificationsEnabled() {
+    return notificationsEnabled;
+  }
+
+  public void setNotificationsEnabled(boolean notificationsEnabled) {
+    this.notificationsEnabled = notificationsEnabled;
+  }
 }

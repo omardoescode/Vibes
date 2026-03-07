@@ -9,7 +9,7 @@ import java.util.Map;
 @RequestMapping("/health")
 public class HealthController {
 
-  @GetMapping("/health")
+  @GetMapping("")
   public Map<String, String> health() {
     return Map.of(
         "status", "UP",
