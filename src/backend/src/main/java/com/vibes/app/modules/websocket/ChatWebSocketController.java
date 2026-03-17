@@ -1,9 +1,14 @@
 package com.vibes.app.modules.websocket;
 
 import com.vibes.app.modules.auth.services.AuthService;
+import com.vibes.app.modules.chat.group_chat.GroupChat;
+import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
 import com.vibes.app.modules.messages.dto.MessagePayload;
 import com.vibes.app.modules.messages.entities.Message;
+import com.vibes.app.modules.messages.flyweight.MessageView;
+import com.vibes.app.modules.messages.flyweight.UserProfileFlyweight;
+import com.vibes.app.modules.messages.flyweight.UserProfileFlyweightFactory;
 import com.vibes.app.modules.messages.services.MessageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,20 +31,26 @@ public class ChatWebSocketController {
 
     private final MessageService messageService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final PrivateChatRepository chatRepository;
+    private final PrivateChatRepository privateChatRepository;
+    private final GroupChatRepository groupChatRepository;
     private final ChatSessionRegistry sessionRegistry;
     private final AuthService authService;
+    private final UserProfileFlyweightFactory flyweightFactory;
 
     public ChatWebSocketController(MessageService messageService,
                                    SimpMessagingTemplate messagingTemplate,
-                                   PrivateChatRepository chatRepository,
+                                   PrivateChatRepository privateChatRepository,
+                                   GroupChatRepository groupChatRepository,
                                    ChatSessionRegistry sessionRegistry,
-                                   AuthService authService) {
+                                   AuthService authService,
+                                   UserProfileFlyweightFactory flyweightFactory) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
-        this.chatRepository = chatRepository;
+        this.privateChatRepository = privateChatRepository;
+        this.groupChatRepository = groupChatRepository;
         this.sessionRegistry = sessionRegistry;
         this.authService = authService;
+        this.flyweightFactory = flyweightFactory;
     }
 
     // -------------------------------------------------------------------------
@@ -62,7 +73,6 @@ public class ChatWebSocketController {
 
     /**
      * Client sends to /app/chat.close when it navigates away from a chat.
-     * Payload: ignored.
      */
     @MessageMapping("/chat.close")
     public void closeChat(Principal principal) {
@@ -72,8 +82,7 @@ public class ChatWebSocketController {
     }
 
     /**
-     * Clean up registry when a WebSocket session is terminated (tab closed, network drop, etc.)
-     * Also marks the user as offline in the database.
+     * Clean up registry when a WebSocket session is terminated.
      */
     @EventListener
     public void onDisconnect(SessionDisconnectEvent event) {
@@ -93,7 +102,7 @@ public class ChatWebSocketController {
     }
 
     // -------------------------------------------------------------------------
-    // Messaging
+    // Private chat messaging
     // -------------------------------------------------------------------------
 
     /**
@@ -108,7 +117,7 @@ public class ChatWebSocketController {
         Message saved = messageService.processAndSaveTextMessage(payload);
 
         UUID chatId = UUID.fromString(payload.getChatId());
-        var chat = chatRepository.findById(chatId)
+        var chat = privateChatRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
         String user1Id = chat.getUser1().getId().toString();
@@ -129,7 +138,7 @@ public class ChatWebSocketController {
         Message saved = messageService.processAndSaveMediaMessage(payload);
 
         UUID chatId = UUID.fromString(payload.getChatId());
-        var chat = chatRepository.findById(chatId)
+        var chat = privateChatRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
         String user1Id = chat.getUser1().getId().toString();
@@ -137,5 +146,78 @@ public class ChatWebSocketController {
 
         messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
         messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+    }
+
+    // -------------------------------------------------------------------------
+    // Group chat messaging
+    // -------------------------------------------------------------------------
+
+    /**
+     * Client sends to /app/group.send
+     * Payload: { chatId, textContent }
+     *
+     * Saves the message then broadcasts a MessageView (with flyweight sender info)
+     * to every group member individually via their personal queue.
+     */
+    @MessageMapping("/group.send")
+    public void sendGroupMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+        UUID senderId = UUID.fromString(principal.getName());
+        payload.setSenderId(senderId.toString());
+
+        Message saved = messageService.processAndSaveTextMessage(payload);
+
+        UUID chatId = UUID.fromString(payload.getChatId());
+        GroupChat group = groupChatRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found"));
+
+        // Build MessageView using flyweight — sender profile is cached after first lookup
+        UserProfileFlyweight flyweight = flyweightFactory.get(senderId);
+        String senderStatus = group.getMembers().stream()
+                .filter(m -> m.getId().equals(senderId))
+                .findFirst()
+                .map(m -> m.getStatus())
+                .orElse("offline");
+
+        MessageView view = new MessageView(saved, flyweight, senderStatus);
+
+        // Deliver to every member's personal queue
+        group.getMembers().forEach(member ->
+            messagingTemplate.convertAndSendToUser(
+                member.getId().toString(), "/queue/messages", view)
+        );
+
+        log.debug("[group.send] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
+    }
+
+    /**
+     * Client sends to /app/group.media
+     * Payload: { chatId, fileContent }
+     */
+    @MessageMapping("/group.media")
+    public void sendGroupMediaMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+        UUID senderId = UUID.fromString(principal.getName());
+        payload.setSenderId(senderId.toString());
+
+        Message saved = messageService.processAndSaveMediaMessage(payload);
+
+        UUID chatId = UUID.fromString(payload.getChatId());
+        GroupChat group = groupChatRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found"));
+
+        UserProfileFlyweight flyweight = flyweightFactory.get(senderId);
+        String senderStatus = group.getMembers().stream()
+                .filter(m -> m.getId().equals(senderId))
+                .findFirst()
+                .map(m -> m.getStatus())
+                .orElse("offline");
+
+        MessageView view = new MessageView(saved, flyweight, senderStatus);
+
+        group.getMembers().forEach(member ->
+            messagingTemplate.convertAndSendToUser(
+                member.getId().toString(), "/queue/messages", view)
+        );
+
+        log.debug("[group.media] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
     }
 }

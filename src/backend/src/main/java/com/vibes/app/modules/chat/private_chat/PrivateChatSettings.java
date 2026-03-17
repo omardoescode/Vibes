@@ -50,4 +50,9 @@ public class PrivateChatSettings implements ChatSettings {
   public void setNotificationsEnabled(boolean notificationsEnabled) {
     this.notificationsEnabled = notificationsEnabled;
   }
+
+  @Override
+  public void changeSettings() {
+    this.notificationsEnabled = !this.notificationsEnabled;
+  }
 }
