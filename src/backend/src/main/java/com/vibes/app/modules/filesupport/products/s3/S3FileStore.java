@@ -1,12 +1,17 @@
 package com.vibes.app.modules.filesupport.products.s3;
+
 import com.vibes.app.modules.filesupport.products.FileStore;
-import com.vibes.app.modules.filesupport.singleton.MinIOClient;
+import com.vibes.app.modules.filesupport.adapters.S3Api;
+import com.vibes.app.modules.filesupport.adapters.MinioAdapter;
 import java.io.InputStream;
 
 public class S3FileStore implements FileStore {
+
+    private final S3Api s3Api = MinioAdapter.getInstance();
+
     @Override
     public String upload(InputStream data, String filename) {
-        return MinIOClient.getInstance().uploadFile(data, "file-" + filename);
+        return s3Api.uploadFile(data, "file-" + filename);
     }
     @Override
     public String getDownloadLink(String fileId) {
@@ -14,6 +19,6 @@ public class S3FileStore implements FileStore {
     }
     @Override
     public byte[] downloadFile(String fileId) {
-        return MinIOClient.getInstance().downloadFile(fileId);
+        return s3Api.downloadFile(fileId);
     }
 }

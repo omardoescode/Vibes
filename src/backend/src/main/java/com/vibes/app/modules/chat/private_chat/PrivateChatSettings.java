@@ -31,6 +31,10 @@ public class PrivateChatSettings implements ChatSettings {
     this.notificationsEnabled = false;
   }
 
+  // TODO: IMPLEMENT THIS FUNCTION IT WAS CAUSING A BUILD ERROR
+  @Override
+  public void changeSettings() {}
+
   public Long getId() {
     return id;
   }
