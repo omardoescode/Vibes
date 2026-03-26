@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { Search, Users, Plus, LogOut } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { uploadAvatar, toProxyUrl } from '../lib/api';
 import type { ChatSummary } from '../lib/api';
+import SearchModal from './SearchModal';
 
 interface SidebarProps {
   chats: ChatSummary[];
@@ -21,6 +23,12 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  
+  // Get current chat ID from pathname
+  const currentChatId = pathname?.startsWith('/chat/') 
+    ? pathname.split('/chat/')[1] 
+    : undefined;
 
   async function handleLogout() {
     await logout();
@@ -33,13 +41,11 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
     setUploading(true);
     try {
       await uploadAvatar(file);
-      // Re-fetch /auth/me so the context (and this component) reflects the new URL
       await refresh();
     } catch (err) {
       console.error('Avatar upload failed', err);
     } finally {
       setUploading(false);
-      // Reset so the same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
@@ -66,60 +72,68 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
       {/* Header */}
       <div
         style={{
-          padding: '20px 20px 16px',
+          padding: '16px 16px 12px',
           borderBottom: '2px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
         }}
       >
-        <h1 style={{ fontSize: 32, color: 'var(--accent)', margin: 0, lineHeight: 1 }}>
-          vibes
-        </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={onNewGroup}
-            title="New group"
+        {/* Title Row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 12,
+          }}
+        >
+          <h1
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              background: 'var(--yellow-800)',
-              border: '2px solid var(--border)',
+              fontSize: 28,
               color: 'var(--accent)',
-              fontSize: 18,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'var(--shadow)',
-              flexShrink: 0,
+              margin: 0,
+              lineHeight: 1,
+              fontWeight: 700,
+              letterSpacing: '-0.5px',
             }}
           >
-            👥
-          </button>
-          <button
+            vibes
+          </h1>
+        </div>
+
+        {/* Action Toolbar */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            background: 'var(--bg)',
+            padding: '6px',
+            borderRadius: 'var(--radius-md)',
+            border: '2px solid var(--border)',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 6 }}>
+            <ToolbarButton
+              onClick={() => setIsSearchModalOpen(true)}
+              icon={<Search size={18} />}
+              label="Search"
+              variant="secondary"
+              showLabel={false}
+            />
+            <ToolbarButton
+              onClick={onNewGroup}
+              icon={<Users size={18} />}
+              label="Group"
+              variant="secondary"
+              showLabel={false}
+            />
+          </div>
+          <ToolbarButton
             onClick={onNewChat}
-            title="New chat"
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              background: 'var(--accent)',
-              border: 'none',
-              color: '#1a1400',
-              fontSize: 22,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'var(--shadow)',
-              flexShrink: 0,
-            }}
-          >
-            +
-          </button>
+            icon={<Plus size={16} />}
+            label="New"
+            variant="primary"
+            showLabel={true}
+          />
         </div>
       </div>
 
@@ -160,7 +174,7 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
           gap: 12,
         }}
       >
-        {/* Avatar — click to upload */}
+        {/* Avatar */}
         <button
           onClick={() => fileInputRef.current?.click()}
           title="Change profile picture"
@@ -185,7 +199,6 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
           {uploading ? (
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>…</span>
           ) : user?.profilePictureUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={toProxyUrl(user.profilePictureUrl)!}
               alt={user.username}
@@ -205,7 +218,6 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
           )}
         </button>
 
-        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -235,26 +247,90 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, on
             border: 'none',
             cursor: 'pointer',
             color: 'var(--text-muted)',
-            fontSize: 18,
             padding: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          ↩
+          <LogOut size={20} />
         </button>
       </div>
+
+      <SearchModal
+        chatId={currentChatId}
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+      />
     </aside>
   );
 }
 
-// ---------------------------------------------------------------------------
-// ChatListItem
-// ---------------------------------------------------------------------------
+// Toolbar Button Component
+interface ToolbarButtonProps {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  variant: 'primary' | 'secondary';
+  showLabel?: boolean;
+}
 
+function ToolbarButton({ onClick, icon, label, variant, showLabel = true }: ToolbarButtonProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const isPrimary = variant === 'primary';
+
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: showLabel ? 6 : 0,
+        padding: isPrimary ? (showLabel ? '8px 12px' : '8px') : '8px',
+        width: showLabel ? 'auto' : '36px',
+        height: '36px',
+        borderRadius: 'var(--radius-sm)',
+        border: isPrimary ? 'none' : '2px solid transparent',
+        background: isPrimary
+          ? 'var(--accent)'
+          : isHovered
+          ? 'var(--yellow-800)'
+          : 'transparent',
+        color: isPrimary ? '#0d0d0d' : 'var(--text-muted)',
+        fontSize: isPrimary ? 14 : 14,
+        fontWeight: 700,
+        cursor: 'pointer',
+        transition: 'all 0.15s ease',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      {icon}
+      {showLabel && (
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          {label}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ChatListItem Component
 function ChatListItem({
   chat,
   unreadCount,
   active,
-  onClick
+  onClick,
 }: {
   chat: ChatSummary;
   unreadCount: number;
@@ -282,7 +358,6 @@ function ChatListItem({
       }}
     >
       {isGroup ? (
-        // Group chat icon
         <div
           style={{
             width: 40,
@@ -293,16 +368,13 @@ function ChatListItem({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontFamily: 'Rajdhani, sans-serif',
-            fontSize: 16,
             color: 'var(--accent)',
             flexShrink: 0,
           }}
         >
-          👥
+          <Users size={20} />
         </div>
       ) : chat.otherUserProfilePicture ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={toProxyUrl(chat.otherUserProfilePicture)!}
           alt={chat.otherUsername}
@@ -354,7 +426,6 @@ function ChatListItem({
         </div>
       </div>
 
-      {/* Unread badge */}
       {hasUnread && (
         <div
           style={{

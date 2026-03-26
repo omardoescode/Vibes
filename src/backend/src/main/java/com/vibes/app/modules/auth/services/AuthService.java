@@ -89,7 +89,7 @@ public class AuthService {
     }
 
     public List<UserResponse> searchUsers(String query) {
-        return userRepository.findByUsernameContainingIgnoreCase(query)
+        return userRepository.searchUsersFuzzy(query)
                 .stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());

@@ -273,3 +273,134 @@ export function profilePictureUrl(fileId: string): string {
 export function fileDownloadUrl(fileId: string): string {
   return `/api/proxy/filesupport/files/download/${fileId}`;
 }
+
+// ---------------------------------------------------------------------------
+// Export (Bridge Pattern)
+// ---------------------------------------------------------------------------
+
+export type ExportFormat = 'json' | 'csv';
+
+/**
+ * Export full chat history in specified format.
+ * Triggers a file download of the exported data.
+ */
+export async function exportChat(
+  chatId: string,
+  format: ExportFormat = 'json'
+): Promise<Blob> {
+  const res = await fetch(
+    `${BASE}/chats/${encodeURIComponent(chatId)}/export?format=${format}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+    }
+  );
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.error ?? body.message ?? message;
+    } catch {
+      // ignore parse failure
+    }
+    throw new Error(message);
+  }
+
+  return res.blob();
+}
+
+/**
+ * Export messages within a date range.
+ * Dates should be in ISO format (YYYY-MM-DD).
+ */
+export async function exportChatDateRange(
+  chatId: string,
+  startDate: string,
+  endDate: string,
+  format: ExportFormat = 'json'
+): Promise<Blob> {
+  const res = await fetch(
+    `${BASE}/chats/${encodeURIComponent(chatId)}/export/range?format=${format}&startDate=${startDate}&endDate=${endDate}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+    }
+  );
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.error ?? body.message ?? message;
+    } catch {
+      // ignore parse failure
+    }
+    throw new Error(message);
+  }
+
+  return res.blob();
+}
+
+/**
+ * Export messages from specific senders.
+ * senderIds: comma-separated list of user UUIDs
+ */
+export async function exportChatBySenders(
+  chatId: string,
+  senderIds: string[],
+  format: ExportFormat = 'json'
+): Promise<Blob> {
+  const senderIdsParam = senderIds.join(',');
+  const res = await fetch(
+    `${BASE}/chats/${encodeURIComponent(chatId)}/export/senders?format=${format}&senderIds=${encodeURIComponent(senderIdsParam)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+    }
+  );
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.error ?? body.message ?? message;
+    } catch {
+      // ignore parse failure
+    }
+    throw new Error(message);
+  }
+
+  return res.blob();
+}
+
+// ---------------------------------------------------------------------------
+// Search (Bridge Pattern)
+// ---------------------------------------------------------------------------
+
+/**
+ * Search messages within a specific chat.
+ * Uses full-text search by default, or fuzzy search if fuzzy=true.
+ */
+export async function searchChatMessages(
+  chatId: string,
+  query: string,
+  fuzzy: boolean = false
+): Promise<Message[]> {
+  return apiFetch<Message[]>(
+    `/chats/${encodeURIComponent(chatId)}/messages/search?query=${encodeURIComponent(query)}&fuzzy=${fuzzy}`
+  );
+}
+
+/**
+ * Search messages globally across all user's chats.
+ * Uses full-text search by default, or fuzzy search if fuzzy=true.
+ */
+export async function searchGlobalMessages(
+  query: string,
+  fuzzy: boolean = false
+): Promise<Message[]> {
+  return apiFetch<Message[]>(
+    `/messages/search?query=${encodeURIComponent(query)}&fuzzy=${fuzzy}`
+  );
+}

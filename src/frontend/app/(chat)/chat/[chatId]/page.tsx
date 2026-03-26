@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { Users, Download } from 'lucide-react';
 import { getChatMessages, getUserById, sendMediaMessage, toProxyUrl, listChats } from '../../../../lib/api';
 import type { Message, UserProfile, ChatSummary } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
 import { useChatSocket } from '../../../../lib/chat-socket-context';
 import MessageBubble from '../../../../components/MessageBubble';
 import MessageInput from '../../../../components/MessageInput';
+import ExportModal from '../../../../components/ExportModal';
 
 // ---------------------------------------------------------------------------
 // Browser notification helper
@@ -46,6 +48,7 @@ export default function ChatPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -235,7 +238,7 @@ export default function ChatPage() {
           }}
         >
           {isGroup ? (
-            <span style={{ fontSize: 20 }}>👥</span>
+            <Users size={20} />
           ) : otherUser?.profilePictureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -271,6 +274,28 @@ export default function ChatPage() {
                     : 'Disconnected'}
           </div>
         </div>
+
+        {/* Export Button */}
+        <button
+          onClick={() => setIsExportModalOpen(true)}
+          title="Export chat"
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: '50%',
+            background: 'var(--yellow-800)',
+            border: '2px solid var(--border)',
+            color: 'var(--accent)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: 'var(--shadow)',
+            flexShrink: 0,
+          }}
+        >
+          <Download size={18} />
+        </button>
       </div>
 
       {/* Messages */}
@@ -339,6 +364,13 @@ export default function ChatPage() {
         onTyping={handleTyping}
         onFileSelect={handleFileSelect}
         disabled={!socketConnected}
+      />
+
+      <ExportModal
+        chatId={chatId}
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        chatMembers={currentChat?.members?.map(m => ({ userId: m.userId, username: m.username }))}
       />
     </div>
   );
