@@ -1,9 +1,14 @@
 package com.vibes.app.modules.websocket;
 
 import com.vibes.app.modules.auth.services.AuthService;
+import com.vibes.app.modules.chat.group_chat.GroupChat;
+import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
 import com.vibes.app.modules.messages.dto.MessagePayload;
 import com.vibes.app.modules.messages.entities.Message;
+import com.vibes.app.modules.messages.flyweight.MessageView;
+import com.vibes.app.modules.messages.flyweight.UserProfileFlyweight;
+import com.vibes.app.modules.messages.flyweight.UserProfileFlyweightFactory;
 import com.vibes.app.modules.messages.services.MessageService;
 import com.vibes.app.modules.notifications.service.NotificationService;
 import org.slf4j.Logger;
@@ -23,158 +28,233 @@ import java.util.UUID;
 @Controller
 public class ChatWebSocketController {
 
-    private static final Logger log = LoggerFactory.getLogger(ChatWebSocketController.class);
+  private static final Logger log = LoggerFactory.getLogger(ChatWebSocketController.class);
 
-    private final MessageService messageService;
-    private final SimpMessagingTemplate messagingTemplate;
-    private final PrivateChatRepository chatRepository;
-    private final ChatSessionRegistry sessionRegistry;
-    private final AuthService authService;
-    private final NotificationService notificationService;
+  private final MessageService messageService;
+  private final SimpMessagingTemplate messagingTemplate;
+  private final PrivateChatRepository privateChatRepository;
+  private final GroupChatRepository groupChatRepository;
+  private final ChatSessionRegistry sessionRegistry;
+  private final AuthService authService;
+  private final NotificationService notificationService;
+  private final UserProfileFlyweightFactory flyweightFactory;
 
-    public ChatWebSocketController(MessageService messageService,
-                                   SimpMessagingTemplate messagingTemplate,
-                                   PrivateChatRepository chatRepository,
-                                   ChatSessionRegistry sessionRegistry,
-                                   AuthService authService,
-                                   NotificationService notificationService) {
-        this.messageService = messageService;
-        this.messagingTemplate = messagingTemplate;
-        this.chatRepository = chatRepository;
-        this.sessionRegistry = sessionRegistry;
-        this.authService = authService;
-        this.notificationService = notificationService;
+  public ChatWebSocketController(MessageService messageService,
+      SimpMessagingTemplate messagingTemplate,
+      PrivateChatRepository privateChatRepository,
+      GroupChatRepository groupChatRepository,
+      ChatSessionRegistry sessionRegistry,
+      AuthService authService,
+      NotificationService notificationService,
+      UserProfileFlyweightFactory flyweightFactory) {
+    this.messageService = messageService;
+    this.messagingTemplate = messagingTemplate;
+    this.privateChatRepository = privateChatRepository;
+    this.groupChatRepository = groupChatRepository;
+    this.sessionRegistry = sessionRegistry;
+    this.authService = authService;
+    this.notificationService = notificationService;
+    this.flyweightFactory = flyweightFactory;
+  }
+
+  // -------------------------------------------------------------------------
+  // Chat presence
+  // -------------------------------------------------------------------------
+
+  /**
+   * Client sends to /app/chat.open when it navigates into a chat.
+   * Payload: { "chatId": "<uuid>" }
+   */
+  @MessageMapping("/chat.open")
+  public void openChat(@Payload Map<String, String> payload, Principal principal) {
+    String userId = principal.getName();
+    String chatId = payload.get("chatId");
+    if (chatId != null) {
+      sessionRegistry.openChat(userId, chatId);
+      log.debug("[chat.open] user={} chat={}", userId, chatId);
     }
+  }
 
-    // -------------------------------------------------------------------------
-    // Chat presence
-    // -------------------------------------------------------------------------
+  /**
+   * Client sends to /app/chat.close when it navigates away from a chat.
+   */
+  @MessageMapping("/chat.close")
+  public void closeChat(Principal principal) {
+    String userId = principal.getName();
+    sessionRegistry.closeChat(userId);
+    log.debug("[chat.close] user={}", userId);
+  }
 
-    /**
-     * Client sends to /app/chat.open when it navigates into a chat.
-     * Payload: { "chatId": "<uuid>" }
-     */
-    @MessageMapping("/chat.open")
-    public void openChat(@Payload Map<String, String> payload, Principal principal) {
-        String userId = principal.getName();
-        String chatId = payload.get("chatId");
-        if (chatId != null) {
-            sessionRegistry.openChat(userId, chatId);
-            log.debug("[chat.open] user={} chat={}", userId, chatId);
-        }
+  /**
+   * Clean up registry when a WebSocket session is terminated.
+   */
+  @EventListener
+  public void onDisconnect(SessionDisconnectEvent event) {
+    StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
+    Principal principal = accessor.getUser();
+    if (principal != null) {
+      String userId = principal.getName();
+      sessionRegistry.closeChat(userId);
+      log.debug("[ws.disconnect] user={} removed from registry", userId);
+      try {
+        authService.updateStatus(UUID.fromString(userId), "offline");
+        log.debug("[ws.disconnect] user={} marked offline", userId);
+      } catch (Exception e) {
+        log.warn("[ws.disconnect] failed to mark user={} offline: {}", userId, e.getMessage());
+      }
     }
+  }
 
-    /**
-     * Client sends to /app/chat.close when it navigates away from a chat.
-     * Payload: ignored.
-     */
-    @MessageMapping("/chat.close")
-    public void closeChat(Principal principal) {
-        String userId = principal.getName();
-        sessionRegistry.closeChat(userId);
-        log.debug("[chat.close] user={}", userId);
-    }
+  // -------------------------------------------------------------------------
+  // Private chat messaging
+  // -------------------------------------------------------------------------
 
-    /**
-     * Clean up registry when a WebSocket session is terminated (tab closed, network drop, etc.)
-     * Also marks the user as offline in the database.
-     */
-    @EventListener
-    public void onDisconnect(SessionDisconnectEvent event) {
-        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
-        Principal principal = accessor.getUser();
-        if (principal != null) {
-            String userId = principal.getName();
-            sessionRegistry.closeChat(userId);
-            log.debug("[ws.disconnect] user={} removed from registry", userId);
-            try {
-                authService.updateStatus(UUID.fromString(userId), "offline");
-                log.debug("[ws.disconnect] user={} marked offline", userId);
-            } catch (Exception e) {
-                log.warn("[ws.disconnect] failed to mark user={} offline: {}", userId, e.getMessage());
-            }
-        }
-    }
+  /**
+   * Client sends to /app/chat.send
+   * Payload: { chatId, textContent }
+   */
+  @MessageMapping("/chat.send")
+  public void sendMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+    UUID senderId = UUID.fromString(principal.getName());
+    payload.setSenderId(senderId.toString());
 
-    // -------------------------------------------------------------------------
-    // Messaging
-    // -------------------------------------------------------------------------
+    Message saved = messageService.processAndSaveTextMessage(payload);
 
-    /**
-     * Client sends to /app/chat.send
-     * Payload: { chatId, textContent }
-     */
-    @MessageMapping("/chat.send")
-    public void sendMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
-        UUID senderId = UUID.fromString(principal.getName());
-        payload.setSenderId(senderId.toString());
+    UUID chatId = UUID.fromString(payload.getChatId());
+    var chat = privateChatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
-        Message saved = messageService.processAndSaveTextMessage(payload);
+    String user1Id = chat.getUser1().getId().toString();
+    String user2Id = chat.getUser2().getId().toString();
 
-        UUID chatId = UUID.fromString(payload.getChatId());
-        var chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
+    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
 
-        String user1Id = chat.getUser1().getId().toString();
-        String user2Id = chat.getUser2().getId().toString();
+    // Send notification to the recipient (the other user, not the sender)
+    UUID recipientId = chat.getUser1().getId().equals(senderId)
+        ? chat.getUser2().getId()
+        : chat.getUser1().getId();
+    notificationService.notifyNewMessage(saved, recipientId);
+  }
 
-        messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
-        messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+  /**
+   * Client sends to /app/chat.media
+   */
+  @MessageMapping("/chat.media")
+  public void sendMediaMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+    UUID senderId = UUID.fromString(principal.getName());
+    payload.setSenderId(senderId.toString());
 
-        // Send notification to the recipient (the other user, not the sender)
-        UUID recipientId = chat.getUser1().getId().equals(senderId) 
-            ? chat.getUser2().getId() 
-            : chat.getUser1().getId();
-        notificationService.notifyNewMessage(saved, recipientId);
-    }
+    Message saved = messageService.processAndSaveMediaMessage(payload);
 
-    /**
-     * Client sends to /app/chat.media
-     */
-    @MessageMapping("/chat.media")
-    public void sendMediaMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
-        UUID senderId = UUID.fromString(principal.getName());
-        payload.setSenderId(senderId.toString());
+    UUID chatId = UUID.fromString(payload.getChatId());
+    var chat = privateChatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
-        Message saved = messageService.processAndSaveMediaMessage(payload);
+    String user1Id = chat.getUser1().getId().toString();
+    String user2Id = chat.getUser2().getId().toString();
 
-        UUID chatId = UUID.fromString(payload.getChatId());
-        var chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
+    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
 
-        String user1Id = chat.getUser1().getId().toString();
-        String user2Id = chat.getUser2().getId().toString();
+    // Send notification to the recipient (the other user, not the sender)
+    UUID recipientId = chat.getUser1().getId().equals(senderId)
+        ? chat.getUser2().getId()
+        : chat.getUser1().getId();
 
-        messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
-        messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+    System.out.println(
+        "[ChatWebSocketController.media] Sending notification to recipient: " + recipientId + ", sender: " + senderId);
+    notificationService.notifyNewMessage(saved, recipientId);
+  }
 
-        // Send notification to the recipient (the other user, not the sender)
-        UUID recipientId = chat.getUser1().getId().equals(senderId) 
-            ? chat.getUser2().getId() 
-            : chat.getUser1().getId();
-        
-        System.out.println("[ChatWebSocketController.media] Sending notification to recipient: " + recipientId + ", sender: " + senderId);
-        notificationService.notifyNewMessage(saved, recipientId);
-    }
+  /**
+   * Client sends to /app/chat.typing when user starts/stops typing
+   * Payload: { chatId, isTyping: true/false }
+   */
+  @MessageMapping("/chat.typing")
+  public void typing(@Payload Map<String, Object> payload, Principal principal) {
+    UUID senderId = UUID.fromString(principal.getName());
+    UUID chatId = UUID.fromString((String) payload.get("chatId"));
+    Boolean isTyping = (Boolean) payload.get("isTyping");
 
-    /**
-     * Client sends to /app/chat.typing when user starts/stops typing
-     * Payload: { chatId, isTyping: true/false }
-     */
-    @MessageMapping("/chat.typing")
-    public void typing(@Payload Map<String, Object> payload, Principal principal) {
-        UUID senderId = UUID.fromString(principal.getName());
-        UUID chatId = UUID.fromString((String) payload.get("chatId"));
-        Boolean isTyping = (Boolean) payload.get("isTyping");
+    var chat = chatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
-        var chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    // Send typing indicator to the other user (not the sender)
+    UUID recipientId = chat.getUser1().getId().equals(senderId)
+        ? chat.getUser2().getId()
+        : chat.getUser1().getId();
 
-        // Send typing indicator to the other user (not the sender)
-        UUID recipientId = chat.getUser1().getId().equals(senderId) 
-            ? chat.getUser2().getId() 
-            : chat.getUser1().getId();
-        
-        notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping);
-    }
+    notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping);
+  }
+
+  // -------------------------------------------------------------------------
+  // Group chat messaging
+  // -------------------------------------------------------------------------
+
+  /**
+   * Client sends to /app/group.send
+   * Payload: { chatId, textContent }
+   *
+   * Saves the message then broadcasts a MessageView (with flyweight sender info)
+   * to every group member individually via their personal queue.
+   */
+  @MessageMapping("/group.send")
+  public void sendGroupMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+    UUID senderId = UUID.fromString(principal.getName());
+    payload.setSenderId(senderId.toString());
+
+    Message saved = messageService.processAndSaveTextMessage(payload);
+
+    UUID chatId = UUID.fromString(payload.getChatId());
+    GroupChat group = groupChatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Group not found"));
+
+    // Build MessageView using flyweight — sender profile is cached after first
+    // lookup
+    UserProfileFlyweight flyweight = flyweightFactory.get(senderId);
+    String senderStatus = group.getMembers().stream()
+        .filter(m -> m.getId().equals(senderId))
+        .findFirst()
+        .map(m -> m.getStatus())
+        .orElse("offline");
+
+    MessageView view = new MessageView(saved, flyweight, senderStatus);
+
+    // Deliver to every member's personal queue
+    group.getMembers().forEach(member -> messagingTemplate.convertAndSendToUser(
+        member.getId().toString(), "/queue/messages", view));
+
+    log.debug("[group.send] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
+  }
+
+  /**
+   * Client sends to /app/group.media
+   * Payload: { chatId, fileContent }
+   */
+  @MessageMapping("/group.media")
+  public void sendGroupMediaMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
+    UUID senderId = UUID.fromString(principal.getName());
+    payload.setSenderId(senderId.toString());
+
+    Message saved = messageService.processAndSaveMediaMessage(payload);
+
+    UUID chatId = UUID.fromString(payload.getChatId());
+    GroupChat group = groupChatRepository.findById(chatId)
+        .orElseThrow(() -> new IllegalArgumentException("Group not found"));
+
+    UserProfileFlyweight flyweight = flyweightFactory.get(senderId);
+    String senderStatus = group.getMembers().stream()
+        .filter(m -> m.getId().equals(senderId))
+        .findFirst()
+        .map(m -> m.getStatus())
+        .orElse("offline");
+
+    MessageView view = new MessageView(saved, flyweight, senderStatus);
+
+    group.getMembers().forEach(member -> messagingTemplate.convertAndSendToUser(
+        member.getId().toString(), "/queue/messages", view));
+
+    log.debug("[group.media] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
+  }
 }

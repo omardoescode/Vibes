@@ -60,6 +60,7 @@ public class ChatService {
     /**
      * List all chats for the given user.
      */
+    @Transactional(readOnly = true)
     public List<ChatResponse> getChatsForUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
