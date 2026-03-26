@@ -35,12 +35,34 @@ export type SocketStatus = 'connecting' | 'connected' | 'disconnected';
 
 type MessageHandler = (msg: Message) => void;
 
+type NotificationType = 'NEW_MESSAGE' | 'USER_ONLINE' | 'USER_OFFLINE' | 'TYPING_START' | 'TYPING_STOP';
+
+export interface NotificationContext {
+  recipientId: string;
+  senderId: string;
+  chatId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  timestamp: string;
+  payload: any;
+}
+
+type NotificationHandler = (notification: NotificationContext) => void;
+type TypingHandler = (chatId: string, senderId: string, isTyping: boolean) => void;
+
 interface ChatSocketState {
   status: SocketStatus;
   /** Subscribe to incoming messages; returns an unsubscribe function */
   subscribe: (handler: MessageHandler) => () => void;
+  /** Subscribe to notifications; returns an unsubscribe function */
+  subscribeToNotifications: (handler: NotificationHandler) => () => void;
+  /** Subscribe to typing indicators; returns an unsubscribe function */
+  subscribeToTyping: (handler: TypingHandler) => () => void;
   /** Send a text message via STOMP */
   sendMessage: (chatId: string, textContent: string) => void;
+  /** Send typing indicator */
+  sendTyping: (chatId: string, isTyping: boolean) => void;
   /** Notify the backend that this user has opened a chat */
   notifyOpen: (chatId: string) => void;
   /** Notify the backend that this user has closed the current chat */
@@ -54,7 +76,10 @@ interface ChatSocketState {
 const ChatSocketContext = createContext<ChatSocketState>({
   status: 'disconnected',
   subscribe: () => () => {},
+  subscribeToNotifications: () => () => {},
+  subscribeToTyping: () => () => {},
   sendMessage: () => {},
+  sendTyping: () => {},
   notifyOpen: () => {},
   notifyClose: () => {},
 });
@@ -75,6 +100,8 @@ export function ChatSocketProvider({
 
   // Fan-out: set of active handlers
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
+  const notificationHandlersRef = useRef<Set<NotificationHandler>>(new Set());
+  const typingHandlersRef = useRef<Set<TypingHandler>>(new Set());
 
   useEffect(() => {
     if (!userId) return;
@@ -85,7 +112,7 @@ export function ChatSocketProvider({
 
       onConnect: () => {
         setStatus('connected');
-        // Subscribe to the user-destination queue.
+        // Subscribe to the user-destination queue for messages.
         // The path must be /user/queue/messages — NOT /user/{id}/queue/messages.
         // Spring's UserDestinationMessageHandler rewrites convertAndSendToUser(uuid, "/queue/messages")
         // to /user/{uuid}/queue/messages internally, but clients must subscribe to the
@@ -98,6 +125,22 @@ export function ChatSocketProvider({
               handlersRef.current.forEach((h) => h(msg));
             } catch {
               console.error('[socket] failed to parse message', frame.body);
+            }
+          }
+        );
+
+        // Subscribe to notifications queue
+        console.log('[socket] subscribing to /user/queue/notifications');
+        client.subscribe(
+          `/user/queue/notifications`,
+          (frame: IMessage) => {
+            console.log('[socket] notification received:', frame.body);
+            try {
+              const notification: NotificationContext = JSON.parse(frame.body);
+              console.log('[socket] parsed notification:', notification);
+              notificationHandlersRef.current.forEach((h) => h(notification));
+            } catch (err) {
+              console.error('[socket] failed to parse notification', frame.body, err);
             }
           }
         );
@@ -132,6 +175,20 @@ export function ChatSocketProvider({
     };
   }, []);
 
+  const subscribeToNotifications = useCallback((handler: NotificationHandler) => {
+    notificationHandlersRef.current.add(handler);
+    return () => {
+      notificationHandlersRef.current.delete(handler);
+    };
+  }, []);
+
+  const subscribeToTyping = useCallback((handler: TypingHandler) => {
+    typingHandlersRef.current.add(handler);
+    return () => {
+      typingHandlersRef.current.delete(handler);
+    };
+  }, []);
+
   const sendMessage = useCallback((chatId: string, textContent: string) => {
     const client = clientRef.current;
     if (!client?.connected) {
@@ -141,6 +198,18 @@ export function ChatSocketProvider({
     client.publish({
       destination: '/app/chat.send',
       body: JSON.stringify({ chatId, textContent }),
+    });
+  }, []);
+
+  const sendTyping = useCallback((chatId: string, isTyping: boolean) => {
+    const client = clientRef.current;
+    if (!client?.connected) {
+      console.warn('[socket] tried to send typing while disconnected');
+      return;
+    }
+    client.publish({
+      destination: '/app/chat.typing',
+      body: JSON.stringify({ chatId, isTyping }),
     });
   }, []);
 
@@ -159,7 +228,18 @@ export function ChatSocketProvider({
   }, []);
 
   return (
-    <ChatSocketContext.Provider value={{ status, subscribe, sendMessage, notifyOpen, notifyClose }}>
+    <ChatSocketContext.Provider 
+      value={{ 
+        status, 
+        subscribe, 
+        subscribeToNotifications,
+        subscribeToTyping,
+        sendMessage, 
+        sendTyping,
+        notifyOpen, 
+        notifyClose 
+      }}
+    >
       {children}
     </ChatSocketContext.Provider>
   );

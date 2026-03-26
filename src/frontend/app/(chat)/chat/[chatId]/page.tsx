@@ -38,12 +38,14 @@ function showNotification(title: string, body: string) {
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const { user } = useAuth();
-  const { status, subscribe, sendMessage, notifyOpen, notifyClose } = useChatSocket();
+  const { status, subscribe, subscribeToTyping, sendMessage, sendTyping, notifyOpen, notifyClose } = useChatSocket();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [uploadError, setUploadError] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -109,6 +111,27 @@ export default function ChatPage() {
     return unsub;
   }, [subscribe, chatId, user, otherUser]);
 
+  // ---- Subscribe to typing indicators ----
+  useEffect(() => {
+    const unsub = subscribeToTyping((incomingChatId, senderId, typing) => {
+      if (incomingChatId !== chatId) return;
+      if (user && senderId === user.id) return; // Don't show own typing
+      
+      setIsTyping(typing);
+      
+      // Clear typing after 3 seconds as a fallback
+      if (typing) {
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+        }, 3000);
+      }
+    });
+    return unsub;
+  }, [subscribeToTyping, chatId, user]);
+
   // ---- Send text (optimistic) ----
   function handleSend(text: string) {
     if (!chatId || !user) return;
@@ -125,6 +148,23 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, optimistic]);
 
     sendMessage(chatId, text);
+    
+    // Clear typing indicator
+    sendTyping(chatId, false);
+  }
+  
+  // ---- Handle typing ----
+  function handleTyping() {
+    if (!chatId || !user) return;
+    sendTyping(chatId, true);
+    
+    // Auto-clear typing after 2 seconds of inactivity
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTyping(chatId, false);
+    }, 2000);
   }
 
   // ---- Upload media ----
@@ -195,12 +235,18 @@ export default function ChatPage() {
           <div
             style={{
               fontSize: 12,
-              color: socketConnected ? '#22c55e' : 'var(--text-muted)',
+              color: isTyping ? 'var(--accent)' : socketConnected ? '#22c55e' : 'var(--text-muted)',
               fontWeight: 600,
               marginTop: 1,
             }}
           >
-            {socketConnected ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Disconnected'}
+            {isTyping 
+              ? 'typing…' 
+              : socketConnected 
+                ? 'Connected' 
+                : status === 'connecting' 
+                  ? 'Connecting…' 
+                  : 'Disconnected'}
           </div>
         </div>
       </div>
@@ -267,6 +313,7 @@ export default function ChatPage() {
 
       <MessageInput
         onSend={handleSend}
+        onTyping={handleTyping}
         onFileSelect={handleFileSelect}
         disabled={!socketConnected}
       />

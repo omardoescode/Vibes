@@ -5,6 +5,7 @@ import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
 import com.vibes.app.modules.messages.dto.MessagePayload;
 import com.vibes.app.modules.messages.entities.Message;
 import com.vibes.app.modules.messages.services.MessageService;
+import com.vibes.app.modules.notifications.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -29,17 +30,20 @@ public class ChatWebSocketController {
     private final PrivateChatRepository chatRepository;
     private final ChatSessionRegistry sessionRegistry;
     private final AuthService authService;
+    private final NotificationService notificationService;
 
     public ChatWebSocketController(MessageService messageService,
                                    SimpMessagingTemplate messagingTemplate,
                                    PrivateChatRepository chatRepository,
                                    ChatSessionRegistry sessionRegistry,
-                                   AuthService authService) {
+                                   AuthService authService,
+                                   NotificationService notificationService) {
         this.messageService = messageService;
         this.messagingTemplate = messagingTemplate;
         this.chatRepository = chatRepository;
         this.sessionRegistry = sessionRegistry;
         this.authService = authService;
+        this.notificationService = notificationService;
     }
 
     // -------------------------------------------------------------------------
@@ -116,6 +120,12 @@ public class ChatWebSocketController {
 
         messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
         messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+
+        // Send notification to the recipient (the other user, not the sender)
+        UUID recipientId = chat.getUser1().getId().equals(senderId) 
+            ? chat.getUser2().getId() 
+            : chat.getUser1().getId();
+        notificationService.notifyNewMessage(saved, recipientId);
     }
 
     /**
@@ -137,5 +147,34 @@ public class ChatWebSocketController {
 
         messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
         messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+
+        // Send notification to the recipient (the other user, not the sender)
+        UUID recipientId = chat.getUser1().getId().equals(senderId) 
+            ? chat.getUser2().getId() 
+            : chat.getUser1().getId();
+        
+        System.out.println("[ChatWebSocketController.media] Sending notification to recipient: " + recipientId + ", sender: " + senderId);
+        notificationService.notifyNewMessage(saved, recipientId);
+    }
+
+    /**
+     * Client sends to /app/chat.typing when user starts/stops typing
+     * Payload: { chatId, isTyping: true/false }
+     */
+    @MessageMapping("/chat.typing")
+    public void typing(@Payload Map<String, Object> payload, Principal principal) {
+        UUID senderId = UUID.fromString(principal.getName());
+        UUID chatId = UUID.fromString((String) payload.get("chatId"));
+        Boolean isTyping = (Boolean) payload.get("isTyping");
+
+        var chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+
+        // Send typing indicator to the other user (not the sender)
+        UUID recipientId = chat.getUser1().getId().equals(senderId) 
+            ? chat.getUser2().getId() 
+            : chat.getUser1().getId();
+        
+        notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping);
     }
 }

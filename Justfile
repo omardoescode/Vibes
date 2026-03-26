@@ -22,8 +22,7 @@ dev:
   just db_init; \
   just minio_init; \
   sleep 3; \
-  just backend_dev; \
-  just frontend_dev;
+  just backend_dev;
 
 
 [group("backend")]

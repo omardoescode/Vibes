@@ -4,13 +4,15 @@ import { useRef, useState } from 'react';
 
 interface MessageInputProps {
   onSend: (text: string) => void;
+  onTyping?: () => void;
   onFileSelect?: (file: File) => void;
   disabled?: boolean;
 }
 
-export default function MessageInput({ onSend, onFileSelect, disabled }: MessageInputProps) {
+export default function MessageInput({ onSend, onTyping, onFileSelect, disabled }: MessageInputProps) {
   const [text, setText] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,7 +88,13 @@ export default function MessageInput({ onSend, onFileSelect, disabled }: Message
       {/* Text area */}
       <textarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          // Notify typing when user types
+          if (onTyping && e.target.value.trim()) {
+            onTyping();
+          }
+        }}
         onKeyDown={handleKeyDown}
         placeholder="Send a message… (Enter to send, Shift+Enter for newline)"
         disabled={disabled}

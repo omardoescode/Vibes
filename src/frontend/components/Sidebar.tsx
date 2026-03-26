@@ -9,10 +9,12 @@ import type { ChatSummary } from '../lib/api';
 
 interface SidebarProps {
   chats: ChatSummary[];
+  unreadCounts: Record<string, number>;
   onNewChat: () => void;
+  onChatClick?: (chatId: string) => void;
 }
 
-export default function Sidebar({ chats, onNewChat }: SidebarProps) {
+export default function Sidebar({ chats, unreadCounts, onNewChat, onChatClick }: SidebarProps) {
   const { user, logout, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -40,6 +42,12 @@ export default function Sidebar({ chats, onNewChat }: SidebarProps) {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
+
+  const handleChatClick = (chatId: string) => {
+    if (onChatClick) {
+      onChatClick(chatId);
+    }
+  };
 
   return (
     <aside
@@ -110,7 +118,9 @@ export default function Sidebar({ chats, onNewChat }: SidebarProps) {
             <ChatListItem
               key={chat.chatId}
               chat={chat}
+              unreadCount={unreadCounts[chat.chatId] || 0}
               active={pathname === `/chat/${chat.chatId}`}
+              onClick={() => handleChatClick(chat.chatId)}
             />
           ))
         )}
@@ -216,12 +226,24 @@ export default function Sidebar({ chats, onNewChat }: SidebarProps) {
 // ChatListItem
 // ---------------------------------------------------------------------------
 
-function ChatListItem({ chat, active }: { chat: ChatSummary; active: boolean }) {
+function ChatListItem({ 
+  chat, 
+  unreadCount, 
+  active, 
+  onClick 
+}: { 
+  chat: ChatSummary; 
+  unreadCount: number;
+  active: boolean;
+  onClick: () => void;
+}) {
   const initial = chat.otherUsername?.[0]?.toUpperCase() ?? '?';
+  const hasUnread = unreadCount > 0;
 
   return (
     <Link
       href={`/chat/${chat.chatId}`}
+      onClick={onClick}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -271,7 +293,7 @@ function ChatListItem({ chat, active }: { chat: ChatSummary; active: boolean }) 
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <div
           style={{
-            fontWeight: 700,
+            fontWeight: hasUnread ? 800 : 700,
             fontSize: 14,
             color: 'var(--text)',
             overflow: 'hidden',
@@ -285,6 +307,28 @@ function ChatListItem({ chat, active }: { chat: ChatSummary; active: boolean }) 
           {formatDate(chat.createdAt)}
         </div>
       </div>
+
+      {/* Unread badge */}
+      {hasUnread && (
+        <div
+          style={{
+            minWidth: 20,
+            height: 20,
+            borderRadius: '50%',
+            background: 'var(--pop)',
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            padding: '0 6px',
+          }}
+        >
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </div>
+      )}
     </Link>
   );
 }
