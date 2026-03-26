@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationExch
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
@@ -55,12 +56,15 @@ public class SpringSecurityOAuthAdapter implements OAuthProvider {
             throw new IllegalArgumentException("Unknown OAuth provider: " + providerName);
         }
 
-        return registration.getProviderDetails().getAuthorizationUri() +
-                "?" + OAuth2ParameterNames.CLIENT_ID + "=" + registration.getClientId() +
-                "&" + OAuth2ParameterNames.REDIRECT_URI + "=" + registration.getRedirectUri() +
-                "&" + OAuth2ParameterNames.RESPONSE_TYPE + "=code" +
-                "&" + OAuth2ParameterNames.SCOPE + "=" + String.join(" ", registration.getScopes()) +
-                "&" + OAuth2ParameterNames.STATE + "=" + state;
+        return UriComponentsBuilder
+                .fromUriString(registration.getProviderDetails().getAuthorizationUri())
+                .queryParam(OAuth2ParameterNames.CLIENT_ID, registration.getClientId())
+                .queryParam(OAuth2ParameterNames.REDIRECT_URI, registration.getRedirectUri())
+                .queryParam(OAuth2ParameterNames.RESPONSE_TYPE, "code")
+                .queryParam(OAuth2ParameterNames.SCOPE, String.join(" ", registration.getScopes()))
+                .queryParam(OAuth2ParameterNames.STATE, state)
+                .build()
+                .toUriString();
     }
 
     @Override
