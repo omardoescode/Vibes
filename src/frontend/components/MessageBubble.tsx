@@ -1,10 +1,12 @@
 'use client';
 
 import type { Message } from '../lib/api';
+import { toProxyUrl } from '../lib/api';
 
 interface MessageBubbleProps {
   message: Message;
   isMine: boolean;
+  isGroup?: boolean;
 }
 
 /**
@@ -42,56 +44,169 @@ function extractFilename(content: string): string {
   return withoutUuid || segment;
 }
 
-export default function MessageBubble({ message, isMine }: MessageBubbleProps) {
+export default function MessageBubble({ message, isMine, isGroup = false }: MessageBubbleProps) {
   const time = formatTime(message.timestamp);
-
   const isFile = message.type === 'FILE';
+  
+  // Show sender info for group chats
+  const showSender = isGroup;
+  const senderName = isMine ? 'You' : (message.senderUsername || 'Unknown');
+  const senderInitial = senderName[0]?.toUpperCase() || '?';
 
+  if (!showSender) {
+    // Private chat - simple bubble style
+    return (
+      <div
+        className="animate-pop-in"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isMine ? 'flex-end' : 'flex-start',
+          marginBottom: 6,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '72%',
+            padding: '10px 14px',
+            borderRadius: isMine ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
+            background: isMine ? 'var(--accent)' : 'var(--bg-card)',
+            color: isMine ? '#0d0d0d' : 'var(--text)',
+            border: isMine ? 'none' : '2px solid var(--border)',
+            boxShadow: 'var(--shadow)',
+            fontSize: 15,
+            fontWeight: 500,
+            lineHeight: 1.5,
+            wordBreak: 'break-word',
+          }}
+        >
+          {message.type === 'TEXT' && <span>{message.content}</span>}
+          {isFile && (
+            <FileAttachment
+              url={proxyUrl(message.content)}
+              filename={extractFilename(message.content)}
+              isMine={isMine}
+            />
+          )}
+        </div>
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+            marginLeft: isMine ? 0 : 4,
+            marginRight: isMine ? 4 : 0,
+          }}
+        >
+          {time}
+        </span>
+      </div>
+    );
+  }
+
+  // Group chat - WhatsApp style with avatar and username
   return (
     <div
       className="animate-pop-in"
       style={{
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: isMine ? 'flex-end' : 'flex-start',
-        marginBottom: 6,
+        flexDirection: isMine ? 'row-reverse' : 'row',
+        alignItems: 'flex-start',
+        marginBottom: 12,
+        gap: 8,
       }}
     >
+      {/* Avatar */}
       <div
         style={{
-          maxWidth: '72%',
-          padding: '10px 14px',
-          borderRadius: isMine ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
-          background: isMine ? 'var(--accent)' : 'var(--bg-card)',
-          color: isMine ? '#0d0d0d' : 'var(--text)',
-          border: isMine ? 'none' : '2px solid var(--border)',
-          boxShadow: 'var(--shadow)',
-          fontSize: 15,
-          fontWeight: 500,
-          lineHeight: 1.5,
-          wordBreak: 'break-word',
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: 'var(--yellow-800)',
+          border: '2px solid var(--border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'Rajdhani, sans-serif',
+          fontSize: 14,
+          color: 'var(--accent)',
+          flexShrink: 0,
+          overflow: 'hidden',
         }}
       >
-        {message.type === 'TEXT' && <span>{message.content}</span>}
-        {isFile && (
-          <FileAttachment
-            url={proxyUrl(message.content)}
-            filename={extractFilename(message.content)}
-            isMine={isMine}
+        {message.senderProfilePictureUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={toProxyUrl(message.senderProfilePictureUrl)!}
+            alt={senderName}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
+        ) : (
+          senderInitial
         )}
       </div>
-      <span
+
+      {/* Message content */}
+      <div
         style={{
-          fontSize: 11,
-          color: 'var(--text-muted)',
-          marginTop: 4,
-          marginLeft: isMine ? 0 : 4,
-          marginRight: isMine ? 4 : 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isMine ? 'flex-end' : 'flex-start',
+          maxWidth: 'calc(72% - 40px)',
         }}
       >
-        {time}
-      </span>
+        {/* Username */}
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--text-muted)',
+            marginBottom: 2,
+            marginLeft: isMine ? 0 : 4,
+            marginRight: isMine ? 4 : 0,
+          }}
+        >
+          {senderName}
+        </span>
+
+        {/* Message bubble */}
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: isMine ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
+            background: isMine ? 'var(--accent)' : 'var(--bg-card)',
+            color: isMine ? '#0d0d0d' : 'var(--text)',
+            border: isMine ? 'none' : '2px solid var(--border)',
+            boxShadow: 'var(--shadow)',
+            fontSize: 15,
+            fontWeight: 500,
+            lineHeight: 1.5,
+            wordBreak: 'break-word',
+          }}
+        >
+          {message.type === 'TEXT' && <span>{message.content}</span>}
+          {isFile && (
+            <FileAttachment
+              url={proxyUrl(message.content)}
+              filename={extractFilename(message.content)}
+              isMine={isMine}
+            />
+          )}
+        </div>
+
+        {/* Time */}
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 2,
+            marginLeft: isMine ? 0 : 4,
+            marginRight: isMine ? 4 : 0,
+          }}
+        >
+          {time}
+        </span>
+      </div>
     </div>
   );
 }
@@ -158,5 +273,3 @@ function formatTime(iso: string): string {
     return '';
   }
 }
-
-

@@ -7,6 +7,8 @@ import { ChatSocketProvider, useChatSocket, type NotificationContext } from '../
 import { listChats, type ChatSummary, type Message } from '../../lib/api';
 import Sidebar from '../../components/Sidebar';
 import UserSearchModal from '../../components/UserSearchModal';
+import CreateGroupModal from '../../components/CreateGroupModal';
+import type { GroupChatResponse } from '../../lib/api';
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
 
@@ -65,6 +67,7 @@ function ChatShell({
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [showSearch, setShowSearch] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const { subscribe, subscribeToNotifications, notifyOpen } = useChatSocket();
 
   // Load initial unread counts
@@ -215,12 +218,30 @@ function ChatShell({
     });
   }
 
+  function handleGroupCreated(group: GroupChatResponse) {
+    const chatSummary: ChatSummary = {
+      chatId: group.chatId,
+      type: 'GROUP',
+      name: group.name,
+      groupPictureUrl: group.groupPictureUrl,
+      creatorId: group.creatorId,
+      members: group.members,
+      memberCount: group.members.length,
+      createdAt: group.createdAt,
+    };
+    setChats((prev) => {
+      if (prev.some((c) => c.chatId === group.chatId)) return prev;
+      return [chatSummary, ...prev];
+    });
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar 
-        chats={chats} 
+      <Sidebar
+        chats={chats}
         unreadCounts={unreadCounts}
-        onNewChat={() => setShowSearch(true)} 
+        onNewChat={() => setShowSearch(true)}
+        onNewGroup={() => setShowGroupModal(true)}
         onChatClick={handleChatClick}
       />
       <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -230,6 +251,12 @@ function ChatShell({
         <UserSearchModal
           onClose={() => setShowSearch(false)}
           onChatStarted={handleChatStarted}
+        />
+      )}
+      {showGroupModal && (
+        <CreateGroupModal
+          onClose={() => setShowGroupModal(false)}
+          onGroupCreated={handleGroupCreated}
         />
       )}
     </div>

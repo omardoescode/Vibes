@@ -33,7 +33,6 @@ public class GroupChatSettings implements ChatSettings {
     @Override
     public void disableNotifications() { this.notificationsEnabled = false; }
 
-    @Override
     public void changeSettings() { this.notificationsEnabled = !this.notificationsEnabled; }
 
     public Long getId() { return id; }

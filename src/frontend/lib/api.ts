@@ -32,10 +32,24 @@ export interface UserProfile {
 
 export interface ChatSummary {
   chatId: string;
-  otherUserId: string;
-  otherUsername: string;
-  otherUserProfilePicture: string | null;
+  type: 'PRIVATE' | 'GROUP';
+  // Private chat fields
+  otherUserId?: string;
+  otherUsername?: string;
+  otherUserProfilePicture?: string | null;
+  // Group chat fields
+  name?: string;
+  groupPictureUrl?: string | null;
+  creatorId?: string;
+  members?: MemberInfo[];
+  memberCount?: number;
   createdAt: string;
+}
+
+export interface MemberInfo {
+  userId: string;
+  username: string;
+  profilePictureUrl: string | null;
 }
 
 export type MessageType = 'TEXT' | 'FILE';
@@ -47,6 +61,9 @@ export interface Message {
   timestamp: string;
   content: string;
   type: MessageType;
+  // Group chat fields (from MessageView)
+  senderUsername?: string;
+  senderProfilePictureUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +176,35 @@ export async function startChat(targetUserId: string): Promise<ChatSummary> {
 
 export async function listChats(): Promise<ChatSummary[]> {
   return apiFetch<ChatSummary[]>('/chats');
+}
+
+// ---------------------------------------------------------------------------
+// Group Chats
+// ---------------------------------------------------------------------------
+
+export interface CreateGroupRequest {
+  name: string;
+  memberIds: string[];
+}
+
+export interface GroupChatResponse {
+  chatId: string;
+  name: string;
+  groupPictureUrl: string | null;
+  creatorId: string;
+  members: MemberInfo[];
+  createdAt: string;
+}
+
+export async function createGroup(request: CreateGroupRequest): Promise<GroupChatResponse> {
+  return apiFetch<GroupChatResponse>('/groups', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+}
+
+export async function listGroups(): Promise<GroupChatResponse[]> {
+  return apiFetch<GroupChatResponse[]>('/groups');
 }
 
 // ---------------------------------------------------------------------------

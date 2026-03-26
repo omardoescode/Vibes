@@ -3,6 +3,7 @@ package com.vibes.app.modules.messages.controllers;
 import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
 import com.vibes.app.modules.messages.dto.MessagePayload;
 import com.vibes.app.modules.messages.entities.Message;
+import com.vibes.app.modules.messages.services.MessageQueryService;
 import com.vibes.app.modules.messages.services.MessageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +11,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController("messagesMessagesController")
@@ -17,14 +19,17 @@ import java.util.UUID;
 public class MessageController {
 
     private final MessageService messageService;
+    private final MessageQueryService messageQueryService;
     private final SimpMessagingTemplate messagingTemplate;
     private final PrivateChatRepository chatRepository;
 
     @Autowired
     public MessageController(MessageService messageService,
+                             MessageQueryService messageQueryService,
                              SimpMessagingTemplate messagingTemplate,
                              PrivateChatRepository chatRepository) {
         this.messageService = messageService;
+        this.messageQueryService = messageQueryService;
         this.messagingTemplate = messagingTemplate;
         this.chatRepository = chatRepository;
     }
@@ -77,7 +82,7 @@ public class MessageController {
     }
 
     @GetMapping("/chat/{chatId}")
-    public ResponseEntity<Iterable<Message>> getChatMessages(@PathVariable String chatId) {
-        return ResponseEntity.ok(messageService.getMessagesByChatId(chatId));
+    public ResponseEntity<List<?>> getChatMessages(@PathVariable String chatId) {
+        return ResponseEntity.ok(messageQueryService.getMessagesForChat(chatId));
     }
 }

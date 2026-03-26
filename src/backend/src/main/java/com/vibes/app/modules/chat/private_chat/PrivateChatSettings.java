@@ -31,8 +31,6 @@ public class PrivateChatSettings implements ChatSettings {
     this.notificationsEnabled = false;
   }
 
-  public void changeSettings() {}
-
   public Long getId() {
     return id;
   }
@@ -53,7 +51,6 @@ public class PrivateChatSettings implements ChatSettings {
     this.notificationsEnabled = notificationsEnabled;
   }
 
-  @Override
   public void changeSettings() {
     this.notificationsEnabled = !this.notificationsEnabled;
   }

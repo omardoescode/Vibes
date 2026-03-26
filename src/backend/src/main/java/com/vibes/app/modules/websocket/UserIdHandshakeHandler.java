@@ -1,6 +1,7 @@
 package com.vibes.app.modules.websocket;
 
 import com.vibes.app.modules.auth.repositories.UserCredentialsRepository;
+import com.vibes.app.modules.auth.repositories.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.server.ServerHttpRequest;
@@ -33,9 +34,12 @@ public class UserIdHandshakeHandler extends DefaultHandshakeHandler {
     private static final Logger log = LoggerFactory.getLogger(UserIdHandshakeHandler.class);
 
     private final UserCredentialsRepository userCredentialsRepository;
+    private final UserRepository userRepository;
 
-    public UserIdHandshakeHandler(UserCredentialsRepository userCredentialsRepository) {
+    public UserIdHandshakeHandler(UserCredentialsRepository userCredentialsRepository,
+                                  UserRepository userRepository) {
         this.userCredentialsRepository = userCredentialsRepository;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -54,11 +58,23 @@ public class UserIdHandshakeHandler extends DefaultHandshakeHandler {
         }
 
         String email = httpPrincipal.getName();
+        
+        // Try UserCredentials first
         return userCredentialsRepository.findByEmail(email)
                 .map(credentials -> {
                     String userId = credentials.getUser().getId().toString();
                     log.info("[ws] handshake principal {} → {}", email, userId);
                     return (Principal) () -> userId;
+                })
+                .or(() -> {
+                    // Fallback: try to find user directly by credentials email
+                    log.debug("[ws] credentials not found for {}, trying user repository", email);
+                    return userRepository.findByCredentialsEmail(email)
+                            .map(user -> {
+                                String userId = user.getId().toString();
+                                log.info("[ws] handshake principal {} → {} (via user repo)", email, userId);
+                                return (Principal) () -> userId;
+                            });
                 })
                 .orElseGet(() -> {
                     log.warn("[ws] no user found for email {}", email);

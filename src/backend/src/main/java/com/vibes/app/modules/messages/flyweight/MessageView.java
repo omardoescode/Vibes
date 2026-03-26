@@ -1,5 +1,6 @@
 package com.vibes.app.modules.messages.flyweight;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.vibes.app.modules.messages.entities.Message;
 
 import java.time.LocalDateTime;
@@ -48,11 +49,17 @@ public class MessageView {
         this.senderStatus = senderStatus;
     }
 
+    @JsonProperty("id")
     public String getMessageId() { return messageId; }
+    
     public String getChatId() { return chatId; }
     public String getContent() { return content; }
     public String getType() { return type; }
     public LocalDateTime getTimestamp() { return timestamp; }
+    
+    @JsonProperty("senderId")
+    public String getSenderIdString() { return senderId != null ? senderId.toString() : null; }
+    
     public UUID getSenderId() { return senderId; }
     public String getSenderUsername() { return senderUsername; }
     public String getSenderProfilePictureUrl() { return senderProfilePictureUrl; }

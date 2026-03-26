@@ -3,14 +3,17 @@ package com.vibes.app.modules.chat.services;
 import com.vibes.app.modules.auth.models.User;
 import com.vibes.app.modules.auth.repositories.UserRepository;
 import com.vibes.app.modules.chat.dto.ChatResponse;
+import com.vibes.app.modules.chat.group_chat.GroupChat;
 import com.vibes.app.modules.chat.private_chat.PrivateChat;
 import com.vibes.app.modules.chat.private_chat.PrivateChatFactory;
 import com.vibes.app.modules.chat.private_chat.PrivateChatSettings;
+import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
 import com.vibes.app.modules.chat.repositories.PrivateChatSettingsRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -21,13 +24,16 @@ public class ChatService {
     private final PrivateChatRepository chatRepository;
     private final PrivateChatSettingsRepository settingsRepository;
     private final UserRepository userRepository;
+    private final GroupChatRepository groupChatRepository;
 
     public ChatService(PrivateChatRepository chatRepository,
                        PrivateChatSettingsRepository settingsRepository,
-                       UserRepository userRepository) {
+                       UserRepository userRepository,
+                       GroupChatRepository groupChatRepository) {
         this.chatRepository = chatRepository;
         this.settingsRepository = settingsRepository;
         this.userRepository = userRepository;
+        this.groupChatRepository = groupChatRepository;
     }
 
     /**
@@ -58,16 +64,28 @@ public class ChatService {
     }
 
     /**
-     * List all chats for the given user.
+     * List all chats (private and group) for the given user.
      */
     @Transactional(readOnly = true)
     public List<ChatResponse> getChatsForUser(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        return chatRepository.findAllByUser(user)
+        
+        List<ChatResponse> chats = new ArrayList<>();
+        
+        // Add private chats
+        chats.addAll(chatRepository.findAllByUser(user)
                 .stream()
                 .map(chat -> toResponse(chat, user))
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
+        
+        // Add group chats
+        chats.addAll(groupChatRepository.findAllByMember(user)
+                .stream()
+                .map(group -> toResponse(group))
+                .collect(Collectors.toList()));
+        
+        return chats;
     }
 
     private ChatResponse toResponse(PrivateChat chat, User currentUser) {
@@ -80,6 +98,22 @@ public class ChatService {
                 other.getUsername(),
                 other.getProfilePictureUrl(),
                 chat.getCreatedAt()
+        );
+    }
+
+    private ChatResponse toResponse(GroupChat group) {
+        List<ChatResponse.MemberInfo> members = group.getMembers().stream()
+                .map(m -> new ChatResponse.MemberInfo(m.getId(), m.getUsername(), m.getProfilePictureUrl()))
+                .collect(Collectors.toList());
+        
+        return new ChatResponse(
+                group.getId(),
+                group.getName(),
+                group.getGroupPictureUrl(),
+                group.getCreator().getId(),
+                members,
+                members.size(),
+                group.getCreatedAt()
         );
     }
 }

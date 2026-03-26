@@ -61,6 +61,8 @@ interface ChatSocketState {
   subscribeToTyping: (handler: TypingHandler) => () => void;
   /** Send a text message via STOMP */
   sendMessage: (chatId: string, textContent: string) => void;
+  /** Send a text message to a group via STOMP */
+  sendGroupMessage: (chatId: string, textContent: string) => void;
   /** Send typing indicator */
   sendTyping: (chatId: string, isTyping: boolean) => void;
   /** Notify the backend that this user has opened a chat */
@@ -79,6 +81,7 @@ const ChatSocketContext = createContext<ChatSocketState>({
   subscribeToNotifications: () => () => {},
   subscribeToTyping: () => () => {},
   sendMessage: () => {},
+  sendGroupMessage: () => {},
   sendTyping: () => {},
   notifyOpen: () => {},
   notifyClose: () => {},
@@ -201,6 +204,18 @@ export function ChatSocketProvider({
     });
   }, []);
 
+  const sendGroupMessage = useCallback((chatId: string, textContent: string) => {
+    const client = clientRef.current;
+    if (!client?.connected) {
+      console.warn('[socket] tried to send while disconnected');
+      return;
+    }
+    client.publish({
+      destination: '/app/group.send',
+      body: JSON.stringify({ chatId, textContent }),
+    });
+  }, []);
+
   const sendTyping = useCallback((chatId: string, isTyping: boolean) => {
     const client = clientRef.current;
     if (!client?.connected) {
@@ -228,16 +243,17 @@ export function ChatSocketProvider({
   }, []);
 
   return (
-    <ChatSocketContext.Provider 
-      value={{ 
-        status, 
-        subscribe, 
+    <ChatSocketContext.Provider
+      value={{
+        status,
+        subscribe,
         subscribeToNotifications,
         subscribeToTyping,
-        sendMessage, 
+        sendMessage,
+        sendGroupMessage,
         sendTyping,
-        notifyOpen, 
-        notifyClose 
+        notifyOpen,
+        notifyClose
       }}
     >
       {children}

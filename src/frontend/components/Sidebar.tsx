@@ -11,10 +11,11 @@ interface SidebarProps {
   chats: ChatSummary[];
   unreadCounts: Record<string, number>;
   onNewChat: () => void;
+  onNewGroup: () => void;
   onChatClick?: (chatId: string) => void;
 }
 
-export default function Sidebar({ chats, unreadCounts, onNewChat, onChatClick }: SidebarProps) {
+export default function Sidebar({ chats, unreadCounts, onNewChat, onNewGroup, onChatClick }: SidebarProps) {
   const { user, logout, refresh } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -76,27 +77,50 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onChatClick }:
         <h1 style={{ fontSize: 32, color: 'var(--accent)', margin: 0, lineHeight: 1 }}>
           vibes
         </h1>
-        <button
-          onClick={onNewChat}
-          title="New chat"
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            background: 'var(--accent)',
-            border: 'none',
-            color: '#1a1400',
-            fontSize: 22,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow)',
-            flexShrink: 0,
-          }}
-        >
-          +
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onNewGroup}
+            title="New group"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              background: 'var(--yellow-800)',
+              border: '2px solid var(--border)',
+              color: 'var(--accent)',
+              fontSize: 18,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow)',
+              flexShrink: 0,
+            }}
+          >
+            👥
+          </button>
+          <button
+            onClick={onNewChat}
+            title="New chat"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              background: 'var(--accent)',
+              border: 'none',
+              color: '#1a1400',
+              fontSize: 22,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'var(--shadow)',
+              flexShrink: 0,
+            }}
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {/* Chat list */}
@@ -226,18 +250,20 @@ export default function Sidebar({ chats, unreadCounts, onNewChat, onChatClick }:
 // ChatListItem
 // ---------------------------------------------------------------------------
 
-function ChatListItem({ 
-  chat, 
-  unreadCount, 
-  active, 
-  onClick 
-}: { 
-  chat: ChatSummary; 
+function ChatListItem({
+  chat,
+  unreadCount,
+  active,
+  onClick
+}: {
+  chat: ChatSummary;
   unreadCount: number;
   active: boolean;
   onClick: () => void;
 }) {
-  const initial = chat.otherUsername?.[0]?.toUpperCase() ?? '?';
+  const isGroup = chat.type === 'GROUP';
+  const displayName = isGroup ? chat.name : chat.otherUsername;
+  const initial = displayName?.[0]?.toUpperCase() ?? '?';
   const hasUnread = unreadCount > 0;
 
   return (
@@ -255,7 +281,27 @@ function ChatListItem({
         transition: 'background 0.12s',
       }}
     >
-      {chat.otherUserProfilePicture ? (
+      {isGroup ? (
+        // Group chat icon
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            background: active ? 'var(--yellow-700)' : 'var(--yellow-900)',
+            border: '2px solid var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'Rajdhani, sans-serif',
+            fontSize: 16,
+            color: 'var(--accent)',
+            flexShrink: 0,
+          }}
+        >
+          👥
+        </div>
+      ) : chat.otherUserProfilePicture ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={toProxyUrl(chat.otherUserProfilePicture)!}
@@ -301,10 +347,10 @@ function ChatListItem({
             whiteSpace: 'nowrap',
           }}
         >
-          {chat.otherUsername}
+          {displayName}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-          {formatDate(chat.createdAt)}
+          {isGroup && chat.memberCount ? `${chat.memberCount} members` : formatDate(chat.createdAt)}
         </div>
       </div>
 

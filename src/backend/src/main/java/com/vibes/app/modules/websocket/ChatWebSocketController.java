@@ -1,10 +1,13 @@
 package com.vibes.app.modules.websocket;
 
 import com.vibes.app.modules.auth.services.AuthService;
+import com.vibes.app.modules.chat.ChatParticipantResolver;
 import com.vibes.app.modules.chat.group_chat.GroupChat;
 import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.PrivateChatRepository;
+import com.vibes.app.modules.messages.dto.MessageDTO;
 import com.vibes.app.modules.messages.dto.MessagePayload;
+import org.springframework.transaction.annotation.Transactional;
 import com.vibes.app.modules.messages.entities.Message;
 import com.vibes.app.modules.messages.flyweight.MessageView;
 import com.vibes.app.modules.messages.flyweight.UserProfileFlyweight;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +42,7 @@ public class ChatWebSocketController {
   private final AuthService authService;
   private final NotificationService notificationService;
   private final UserProfileFlyweightFactory flyweightFactory;
+  private final ChatParticipantResolver participantResolver;
 
   public ChatWebSocketController(MessageService messageService,
       SimpMessagingTemplate messagingTemplate,
@@ -46,7 +51,8 @@ public class ChatWebSocketController {
       ChatSessionRegistry sessionRegistry,
       AuthService authService,
       NotificationService notificationService,
-      UserProfileFlyweightFactory flyweightFactory) {
+      UserProfileFlyweightFactory flyweightFactory,
+      ChatParticipantResolver participantResolver) {
     this.messageService = messageService;
     this.messagingTemplate = messagingTemplate;
     this.privateChatRepository = privateChatRepository;
@@ -55,6 +61,7 @@ public class ChatWebSocketController {
     this.authService = authService;
     this.notificationService = notificationService;
     this.flyweightFactory = flyweightFactory;
+    this.participantResolver = participantResolver;
   }
 
   // -------------------------------------------------------------------------
@@ -127,8 +134,10 @@ public class ChatWebSocketController {
     String user1Id = chat.getUser1().getId().toString();
     String user2Id = chat.getUser2().getId().toString();
 
-    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
-    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+    // Use abstraction: normalize to DTO for consistent frontend format
+    MessageDTO messageDTO = MessageDTO.from(saved);
+    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", messageDTO);
+    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", messageDTO);
 
     // Send notification to the recipient (the other user, not the sender)
     UUID recipientId = chat.getUser1().getId().equals(senderId)
@@ -154,8 +163,10 @@ public class ChatWebSocketController {
     String user1Id = chat.getUser1().getId().toString();
     String user2Id = chat.getUser2().getId().toString();
 
-    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", saved);
-    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", saved);
+    // Use abstraction: normalize to DTO for consistent frontend format
+    MessageDTO messageDTO = MessageDTO.from(saved);
+    messagingTemplate.convertAndSendToUser(user1Id, "/queue/messages", messageDTO);
+    messagingTemplate.convertAndSendToUser(user2Id, "/queue/messages", messageDTO);
 
     // Send notification to the recipient (the other user, not the sender)
     UUID recipientId = chat.getUser1().getId().equals(senderId)
@@ -177,15 +188,10 @@ public class ChatWebSocketController {
     UUID chatId = UUID.fromString((String) payload.get("chatId"));
     Boolean isTyping = (Boolean) payload.get("isTyping");
 
-    var chat = chatRepository.findById(chatId)
-        .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
-
-    // Send typing indicator to the other user (not the sender)
-    UUID recipientId = chat.getUser1().getId().equals(senderId)
-        ? chat.getUser2().getId()
-        : chat.getUser1().getId();
-
-    notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping);
+    // Use abstraction to resolve recipients - works for both private and group chats
+    List<UUID> recipients = participantResolver.resolveRecipients(chatId, senderId);
+    recipients.forEach(recipientId -> 
+        notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping));
   }
 
   // -------------------------------------------------------------------------
@@ -200,6 +206,7 @@ public class ChatWebSocketController {
    * to every group member individually via their personal queue.
    */
   @MessageMapping("/group.send")
+  @Transactional
   public void sendGroupMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
     UUID senderId = UUID.fromString(principal.getName());
     payload.setSenderId(senderId.toString());
@@ -219,11 +226,16 @@ public class ChatWebSocketController {
         .map(m -> m.getStatus())
         .orElse("offline");
 
-    MessageView view = new MessageView(saved, flyweight, senderStatus);
+    MessageView messageView = new MessageView(saved, flyweight, senderStatus);
 
     // Deliver to every member's personal queue
     group.getMembers().forEach(member -> messagingTemplate.convertAndSendToUser(
-        member.getId().toString(), "/queue/messages", view));
+        member.getId().toString(), "/queue/messages", messageView));
+
+    // Send notifications to all members except sender
+    group.getMembers().stream()
+        .filter(member -> !member.getId().equals(senderId))
+        .forEach(member -> notificationService.notifyNewMessage(saved, member.getId()));
 
     log.debug("[group.send] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
   }
@@ -233,6 +245,7 @@ public class ChatWebSocketController {
    * Payload: { chatId, fileContent }
    */
   @MessageMapping("/group.media")
+  @Transactional
   public void sendGroupMediaMessage(@Payload MessagePayload payload, Principal principal) throws Exception {
     UUID senderId = UUID.fromString(principal.getName());
     payload.setSenderId(senderId.toString());
@@ -243,6 +256,8 @@ public class ChatWebSocketController {
     GroupChat group = groupChatRepository.findById(chatId)
         .orElseThrow(() -> new IllegalArgumentException("Group not found"));
 
+    // Build MessageView using flyweight — sender profile is cached after first
+    // lookup
     UserProfileFlyweight flyweight = flyweightFactory.get(senderId);
     String senderStatus = group.getMembers().stream()
         .filter(m -> m.getId().equals(senderId))
@@ -250,10 +265,15 @@ public class ChatWebSocketController {
         .map(m -> m.getStatus())
         .orElse("offline");
 
-    MessageView view = new MessageView(saved, flyweight, senderStatus);
+    MessageView messageView = new MessageView(saved, flyweight, senderStatus);
 
     group.getMembers().forEach(member -> messagingTemplate.convertAndSendToUser(
-        member.getId().toString(), "/queue/messages", view));
+        member.getId().toString(), "/queue/messages", messageView));
+
+    // Send notifications to all members except sender
+    group.getMembers().stream()
+        .filter(member -> !member.getId().equals(senderId))
+        .forEach(member -> notificationService.notifyNewMessage(saved, member.getId()));
 
     log.debug("[group.media] chatId={} sender={} members={}", chatId, senderId, group.getMembers().size());
   }

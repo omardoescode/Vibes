@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { getChatMessages, getUserById, sendMediaMessage, toProxyUrl } from '../../../../lib/api';
-import type { Message, UserProfile } from '../../../../lib/api';
+import { getChatMessages, getUserById, sendMediaMessage, toProxyUrl, listChats } from '../../../../lib/api';
+import type { Message, UserProfile, ChatSummary } from '../../../../lib/api';
 import { useAuth } from '../../../../lib/auth-context';
 import { useChatSocket } from '../../../../lib/chat-socket-context';
 import MessageBubble from '../../../../components/MessageBubble';
@@ -38,16 +38,18 @@ function showNotification(title: string, body: string) {
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const { user } = useAuth();
-  const { status, subscribe, subscribeToTyping, sendMessage, sendTyping, notifyOpen, notifyClose } = useChatSocket();
+  const { status, subscribe, subscribeToTyping, sendMessage, sendGroupMessage, sendTyping, notifyOpen, notifyClose } = useChatSocket();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [otherUser, setOtherUser] = useState<UserProfile | null>(null);
+  const [currentChat, setCurrentChat] = useState<ChatSummary | null>(null);
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [uploadError, setUploadError] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isGroup = currentChat?.type === 'GROUP';
 
   // Ask for notification permission once
   useEffect(() => {
@@ -72,13 +74,23 @@ export default function ChatPage() {
       .finally(() => setLoadingMsgs(false));
   }, [chatId]);
 
-  // ---- Load other user's profile ----
+  // ---- Load chat details and other user's profile ----
   useEffect(() => {
-    if (!user || messages.length === 0) return;
+    if (!chatId) return;
+    listChats().then(chats => {
+      const chat = chats.find(c => c.chatId === chatId);
+      if (chat) {
+        setCurrentChat(chat);
+      }
+    }).catch(console.error);
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!user || messages.length === 0 || isGroup) return;
     const otherId = messages.find((m) => m.senderId !== user.id)?.senderId;
     if (!otherId) return;
     getUserById(otherId).then(setOtherUser).catch(() => {});
-  }, [messages, user]);
+  }, [messages, user, isGroup]);
 
   // ---- Auto-scroll to bottom ----
   useEffect(() => {
@@ -147,8 +159,12 @@ export default function ChatPage() {
     };
     setMessages((prev) => [...prev, optimistic]);
 
-    sendMessage(chatId, text);
-    
+    if (isGroup) {
+      sendGroupMessage(chatId, text);
+    } else {
+      sendMessage(chatId, text);
+    }
+
     // Clear typing indicator
     sendTyping(chatId, false);
   }
@@ -182,7 +198,9 @@ export default function ChatPage() {
     }
   }
 
-  const otherUsername = otherUser?.username ?? '…';
+  const displayName = isGroup 
+    ? currentChat?.name ?? 'Group Chat'
+    : otherUser?.username ?? '…';
   const socketConnected = status === 'connected';
 
   return (
@@ -216,37 +234,41 @@ export default function ChatPage() {
             overflow: 'hidden',
           }}
         >
-          {otherUser?.profilePictureUrl ? (
+          {isGroup ? (
+            <span style={{ fontSize: 20 }}>👥</span>
+          ) : otherUser?.profilePictureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={toProxyUrl(otherUser.profilePictureUrl)!}
-              alt={otherUsername}
+              alt={displayName}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : (
-            otherUsername[0]?.toUpperCase() ?? '?'
+            displayName[0]?.toUpperCase() ?? '?'
           )}
         </div>
 
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
-            {otherUsername}
+            {displayName}
           </div>
           <div
             style={{
               fontSize: 12,
-              color: isTyping ? 'var(--accent)' : socketConnected ? '#22c55e' : 'var(--text-muted)',
+              color: isTyping && !isGroup ? 'var(--accent)' : socketConnected ? '#22c55e' : 'var(--text-muted)',
               fontWeight: 600,
               marginTop: 1,
             }}
           >
-            {isTyping 
-              ? 'typing…' 
-              : socketConnected 
-                ? 'Connected' 
-                : status === 'connecting' 
-                  ? 'Connecting…' 
-                  : 'Disconnected'}
+            {isGroup
+              ? `${currentChat?.memberCount ?? 0} members`
+              : isTyping
+                ? 'typing…'
+                : socketConnected
+                  ? 'Connected'
+                  : status === 'connecting'
+                    ? 'Connecting…'
+                    : 'Disconnected'}
           </div>
         </div>
       </div>
@@ -290,6 +312,7 @@ export default function ChatPage() {
             key={msg.id}
             message={msg}
             isMine={msg.senderId === user?.id}
+            isGroup={isGroup}
           />
         ))}
 
