@@ -33,16 +33,14 @@ public class SpringSecurityOAuthAdapter implements OAuthProvider {
     private final OAuth2AuthorizedClientManager authorizedClientManager;
     private final ClientRegistrationRepository clientRegistrationRepository;
     private final RestTemplate restTemplate;
-    private final String providerName;
+    private final String providerName = "github";
 
     public SpringSecurityOAuthAdapter(
             OAuth2AuthorizedClientManager authorizedClientManager,
-            ClientRegistrationRepository clientRegistrationRepository,
-            String providerName) {
+            ClientRegistrationRepository clientRegistrationRepository) {
         this.authorizedClientManager = authorizedClientManager;
         this.clientRegistrationRepository = clientRegistrationRepository;
         this.restTemplate = new RestTemplate();
-        this.providerName = providerName;
     }
 
     @Override
