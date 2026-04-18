@@ -39,7 +39,6 @@ public class NotificationService {
    * Chain order (outer to inner): UnreadCount -> WebSocket -> Base
    */
   private NotificationSender getNotificationChain() {
-    // Build chain manually: Base -> WebSocket -> UnreadCount
     NotificationSender chain = new BaseNotificationSender();
     chain = new WebSocketNotificationDecorator(chain, messagingTemplate);
     chain = new UnreadCountDecorator(chain, chatReadStatusRepository, userRepository);
@@ -48,7 +47,7 @@ public class NotificationService {
 
   public void notifyNewMessage(Message message, UUID recipientId) {
     System.out.println("[NotificationService] notifyNewMessage called for recipient: " + recipientId);
-    
+
     NotificationContext ctx = new NotificationContext();
     ctx.setType(NotificationType.NEW_MESSAGE);
     ctx.setRecipientId(recipientId);
@@ -84,6 +83,46 @@ public class NotificationService {
     ctx.setSenderId(userId);
     ctx.setTitle(isOnline ? "User Online" : "User Offline");
     ctx.setBody(username + " is now " + (isOnline ? "online" : "offline"));
+    ctx.setTimestamp(LocalDateTime.now());
+
+    getNotificationChain().send(ctx);
+  }
+
+  /**
+   * Notifies a group member that a new user has been added to the group.
+   *
+   * @param groupId      the group that was modified
+   * @param addedUserId  the user who was added
+   * @param recipientId  the existing member to notify
+   */
+  public void notifyMemberAdded(UUID groupId, UUID addedUserId, UUID recipientId) {
+    NotificationContext ctx = new NotificationContext();
+    ctx.setType(NotificationType.MEMBER_ADDED);
+    ctx.setRecipientId(recipientId);
+    ctx.setSenderId(addedUserId);
+    ctx.setChatId(groupId);
+    ctx.setTitle("New group member");
+    ctx.setBody("A new member has been added to the group");
+    ctx.setTimestamp(LocalDateTime.now());
+
+    getNotificationChain().send(ctx);
+  }
+
+  /**
+   * Notifies a group member that someone has been removed from the group.
+   *
+   * @param groupId        the group that was modified
+   * @param removedUserId  the user who was removed
+   * @param recipientId    the remaining member to notify
+   */
+  public void notifyMemberRemoved(UUID groupId, UUID removedUserId, UUID recipientId) {
+    NotificationContext ctx = new NotificationContext();
+    ctx.setType(NotificationType.MEMBER_REMOVED);
+    ctx.setRecipientId(recipientId);
+    ctx.setSenderId(removedUserId);
+    ctx.setChatId(groupId);
+    ctx.setTitle("Group member removed");
+    ctx.setBody("A member has been removed from the group");
     ctx.setTimestamp(LocalDateTime.now());
 
     getNotificationChain().send(ctx);

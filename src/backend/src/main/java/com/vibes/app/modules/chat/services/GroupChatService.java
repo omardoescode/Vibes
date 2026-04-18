@@ -7,6 +7,7 @@ import com.vibes.app.modules.chat.dto.GroupChatResponse;
 import com.vibes.app.modules.chat.group_chat.GroupChat;
 import com.vibes.app.modules.chat.group_chat.GroupChatFactory;
 import com.vibes.app.modules.chat.group_chat.GroupChatSettings;
+import com.vibes.app.modules.chat.mediator.GroupChatMediator;
 import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.GroupChatSettingsRepository;
 import org.springframework.stereotype.Service;
@@ -22,13 +23,16 @@ public class GroupChatService {
     private final GroupChatRepository groupChatRepository;
     private final GroupChatSettingsRepository settingsRepository;
     private final UserRepository userRepository;
+    private final GroupChatMediator groupChatMediator;
 
     public GroupChatService(GroupChatRepository groupChatRepository,
                             GroupChatSettingsRepository settingsRepository,
-                            UserRepository userRepository) {
+                            UserRepository userRepository,
+                            GroupChatMediator groupChatMediator) {
         this.groupChatRepository = groupChatRepository;
         this.settingsRepository = settingsRepository;
         this.userRepository = userRepository;
+        this.groupChatMediator = groupChatMediator;
     }
 
     /**
@@ -76,6 +80,7 @@ public class GroupChatService {
 
     /**
      * Adds a new member to an existing group. Only the creator (admin) can do this.
+     * Notifies existing members via the mediator after persistence succeeds.
      */
     @Transactional
     public GroupChatResponse addMember(UUID groupId, UUID requesterId, UUID newMemberId) {
@@ -94,12 +99,18 @@ public class GroupChatService {
                 .createSettings(groupId, newMemberId);
         settingsRepository.save(settings);
 
-        return toResponse(groupChatRepository.save(group));
+        GroupChatResponse response = toResponse(groupChatRepository.save(group));
+
+        // Notify existing members only after persistence has succeeded
+        groupChatMediator.onMemberAdded(groupId, newMemberId);
+
+        return response;
     }
 
     /**
      * Removes a member from the group. Only the creator (admin) can do this.
      * The creator cannot remove themselves.
+     * Notifies remaining members via the mediator after persistence succeeds.
      */
     @Transactional
     public GroupChatResponse removeMember(UUID groupId, UUID requesterId, UUID targetMemberId) {
@@ -118,7 +129,12 @@ public class GroupChatService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + targetMemberId));
 
         group.removeMember(target);
-        return toResponse(groupChatRepository.save(group));
+        GroupChatResponse response = toResponse(groupChatRepository.save(group));
+
+        // Notify remaining members only after persistence has succeeded
+        groupChatMediator.onMemberRemoved(groupId, targetMemberId);
+
+        return response;
     }
 
     private GroupChatResponse toResponse(GroupChat group) {
