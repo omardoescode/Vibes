@@ -1,6 +1,7 @@
 package com.vibes.app.modules.websocket;
 
 import com.vibes.app.modules.auth.services.AuthService;
+import com.vibes.app.modules.notifications.presence.UserPresenceManager;
 import com.vibes.app.modules.chat.ChatParticipantResolver;
 import com.vibes.app.modules.chat.group_chat.GroupChat;
 import com.vibes.app.modules.chat.repositories.GroupChatRepository;
@@ -22,6 +23,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.security.Principal;
@@ -40,6 +42,7 @@ public class ChatWebSocketController {
   private final GroupChatRepository groupChatRepository;
   private final ChatSessionRegistry sessionRegistry;
   private final AuthService authService;
+  private final UserPresenceManager presenceManager;
   private final NotificationService notificationService;
   private final UserProfileFlyweightFactory flyweightFactory;
   private final ChatParticipantResolver participantResolver;
@@ -50,6 +53,7 @@ public class ChatWebSocketController {
       GroupChatRepository groupChatRepository,
       ChatSessionRegistry sessionRegistry,
       AuthService authService,
+      UserPresenceManager presenceManager,
       NotificationService notificationService,
       UserProfileFlyweightFactory flyweightFactory,
       ChatParticipantResolver participantResolver) {
@@ -59,6 +63,7 @@ public class ChatWebSocketController {
     this.groupChatRepository = groupChatRepository;
     this.sessionRegistry = sessionRegistry;
     this.authService = authService;
+    this.presenceManager = presenceManager;
     this.notificationService = notificationService;
     this.flyweightFactory = flyweightFactory;
     this.participantResolver = participantResolver;
@@ -92,6 +97,21 @@ public class ChatWebSocketController {
     log.debug("[chat.close] user={}", userId);
   }
 
+  @EventListener
+  public void onConnect(SessionConnectedEvent event) {
+    StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
+    Principal principal = accessor.getUser();
+    if (principal != null) {
+      String userId = principal.getName();
+      try {
+        presenceManager.setOnline(UUID.fromString(userId));
+        log.debug("[ws.connect] user={} marked online", userId);
+      } catch (Exception e) {
+        log.warn("[ws.connect] failed to mark user={} online: {}", userId, e.getMessage());
+      }
+    }
+  }
+
   /**
    * Clean up registry when a WebSocket session is terminated.
    */
@@ -101,10 +121,9 @@ public class ChatWebSocketController {
     Principal principal = accessor.getUser();
     if (principal != null) {
       String userId = principal.getName();
-      sessionRegistry.closeChat(userId);
-      log.debug("[ws.disconnect] user={} removed from registry", userId);
+      log.debug("[ws.disconnect] user={} disconnected", userId);
       try {
-        authService.updateStatus(UUID.fromString(userId), "offline");
+        presenceManager.setOffline(UUID.fromString(userId));
         log.debug("[ws.disconnect] user={} marked offline", userId);
       } catch (Exception e) {
         log.warn("[ws.disconnect] failed to mark user={} offline: {}", userId, e.getMessage());
