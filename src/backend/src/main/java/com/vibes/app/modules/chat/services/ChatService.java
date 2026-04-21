@@ -13,10 +13,12 @@ import com.vibes.app.modules.chat.repositories.PrivateChatSettingsRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Spliterators;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Service
 public class ChatService {
@@ -71,21 +73,19 @@ public class ChatService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
-        List<ChatResponse> chats = new ArrayList<>();
-        
-        // Add private chats
-        chats.addAll(chatRepository.findAllByUser(user)
-                .stream()
+        List<ChatResponse> privateChats = chatRepository.findAllByUser(user).stream()
                 .map(chat -> toResponse(chat, user))
-                .collect(Collectors.toList()));
-        
-        // Add group chats
-        chats.addAll(groupChatRepository.findAllByMember(user)
-                .stream()
-                .map(group -> toResponse(group))
-                .collect(Collectors.toList()));
-        
-        return chats;
+                .collect(Collectors.toList());
+
+        List<ChatResponse> groupChats = groupChatRepository.findAllByMember(user).stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+
+        Comparator<ChatResponse> byCreatedAtDesc = Comparator.comparing(ChatResponse::getCreatedAt).reversed();
+        ChatIterator iterator = new ChatIterator(privateChats, groupChats, byCreatedAtDesc);
+
+        return StreamSupport.stream(Spliterators.spliteratorUnknownSize(iterator, 0), false)
+                .collect(Collectors.toList());
     }
 
     private ChatResponse toResponse(PrivateChat chat, User currentUser) {
