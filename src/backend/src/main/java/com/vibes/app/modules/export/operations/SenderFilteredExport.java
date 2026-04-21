@@ -9,9 +9,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Refined Abstraction: Exports messages from specific sender(s).
- */
 public class SenderFilteredExport extends ExportOperation {
     
     private final String chatId;
@@ -25,12 +22,6 @@ public class SenderFilteredExport extends ExportOperation {
         this.chatId = chatId;
         this.senderIds = senderIds;
         this.messageRepository = messageRepository;
-    }
-    
-    @Override
-    public String execute() {
-        List<Message> messages = getMessages();
-        return formatter.format(messages);
     }
     
     @Override

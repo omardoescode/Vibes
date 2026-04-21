@@ -7,9 +7,6 @@ import com.vibes.app.modules.messages.repositories.MessageRepository;
 
 import java.util.List;
 
-/**
- * Refined Abstraction: Exports entire chat history.
- */
 public class FullChatExport extends ExportOperation {
     
     private final String chatId;
@@ -19,12 +16,6 @@ public class FullChatExport extends ExportOperation {
         super(formatter);
         this.chatId = chatId;
         this.messageRepository = messageRepository;
-    }
-    
-    @Override
-    public String execute() {
-        List<Message> messages = getMessages();
-        return formatter.format(messages);
     }
     
     @Override

@@ -11,9 +11,6 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Refined Abstraction: Exports messages within a specific date range.
- */
 public class DateRangeExport extends ExportOperation {
     
     private final String chatId;
@@ -29,12 +26,6 @@ public class DateRangeExport extends ExportOperation {
         this.startDate = startDate;
         this.endDate = endDate;
         this.messageRepository = messageRepository;
-    }
-    
-    @Override
-    public String execute() {
-        List<Message> messages = getMessages();
-        return formatter.format(messages);
     }
     
     @Override
