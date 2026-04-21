@@ -115,6 +115,19 @@ public class NotificationService {
    * @param removedUserId  the user who was removed
    * @param recipientId    the remaining member to notify
    */
+  public void notifyGroupCreated(UUID groupId, UUID creatorId, UUID recipientId) {
+    NotificationContext ctx = new NotificationContext();
+    ctx.setType(NotificationType.GROUP_CREATED);
+    ctx.setRecipientId(recipientId);
+    ctx.setSenderId(creatorId);
+    ctx.setChatId(groupId);
+    ctx.setTitle("Added to a new group");
+    ctx.setBody("You were added to a new group");
+    ctx.setTimestamp(LocalDateTime.now());
+
+    getNotificationChain().send(ctx);
+  }
+
   public void notifyMemberRemoved(UUID groupId, UUID removedUserId, UUID recipientId) {
     NotificationContext ctx = new NotificationContext();
     ctx.setType(NotificationType.MEMBER_REMOVED);

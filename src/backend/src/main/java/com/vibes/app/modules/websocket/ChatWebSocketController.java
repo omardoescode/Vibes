@@ -124,7 +124,7 @@ public class ChatWebSocketController {
     Boolean isTyping = (Boolean) payload.get("isTyping");
 
     List<UUID> recipients = participantResolver.resolveRecipients(chatId, senderId);
-    recipients.forEach(recipientId -> 
+    recipients.forEach(recipientId ->
         notificationService.notifyTyping(chatId, senderId, recipientId, isTyping != null && isTyping));
   }
 

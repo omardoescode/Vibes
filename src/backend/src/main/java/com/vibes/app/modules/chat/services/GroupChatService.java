@@ -8,6 +8,7 @@ import com.vibes.app.modules.chat.group_chat.GroupChat;
 import com.vibes.app.modules.chat.group_chat.GroupChatFactory;
 import com.vibes.app.modules.chat.group_chat.GroupChatSettings;
 import com.vibes.app.modules.chat.mediator.GroupChatMediator;
+import com.vibes.app.modules.chat.mediator.GroupCreationMediator;
 import com.vibes.app.modules.chat.repositories.GroupChatRepository;
 import com.vibes.app.modules.chat.repositories.GroupChatSettingsRepository;
 import org.springframework.stereotype.Service;
@@ -24,15 +25,18 @@ public class GroupChatService {
     private final GroupChatSettingsRepository settingsRepository;
     private final UserRepository userRepository;
     private final GroupChatMediator groupChatMediator;
+    private final GroupCreationMediator groupCreationMediator;
 
     public GroupChatService(GroupChatRepository groupChatRepository,
                             GroupChatSettingsRepository settingsRepository,
                             UserRepository userRepository,
-                            GroupChatMediator groupChatMediator) {
+                            GroupChatMediator groupChatMediator,
+                            GroupCreationMediator groupCreationMediator) {
         this.groupChatRepository = groupChatRepository;
         this.settingsRepository = settingsRepository;
         this.userRepository = userRepository;
         this.groupChatMediator = groupChatMediator;
+        this.groupCreationMediator = groupCreationMediator;
     }
 
     /**
@@ -62,6 +66,8 @@ public class GroupChatService {
                     .createSettings(saved.getId(), member.getId());
             settingsRepository.save(settings);
         });
+
+        groupCreationMediator.onGroupCreated(saved.getId());
 
         return toResponse(saved);
     }
