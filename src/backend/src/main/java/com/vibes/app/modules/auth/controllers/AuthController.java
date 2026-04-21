@@ -4,21 +4,24 @@ import com.vibes.app.modules.auth.dto.LoginRequest;
 import com.vibes.app.modules.auth.dto.RegisterRequest;
 import com.vibes.app.modules.auth.dto.UserResponse;
 import com.vibes.app.modules.auth.services.AuthService;
+import com.vibes.app.modules.auth.strategy.AuthRequest;
+import com.vibes.app.modules.auth.strategy.AuthResult;
+import com.vibes.app.modules.auth.strategy.AuthenticationContext;
 import com.vibes.app.modules.filesupport.factory.AbstractStorageFactory;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,14 +31,14 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
-    private final AuthenticationManager authenticationManager;
+    private final AuthenticationContext authenticationContext;
     private final AbstractStorageFactory storageFactory;
 
     public AuthController(AuthService authService,
-                          AuthenticationManager authenticationManager,
+                          AuthenticationContext authenticationContext,
                           AbstractStorageFactory storageFactory) {
         this.authService = authService;
-        this.authenticationManager = authenticationManager;
+        this.authenticationContext = authenticationContext;
         this.storageFactory = storageFactory;
     }
 
@@ -51,20 +54,19 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        try {
-            Authentication auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-            );
-            SecurityContext sc = SecurityContextHolder.getContext();
-            sc.setAuthentication(auth);
-            HttpSession session = httpRequest.getSession(true);
-            session.setAttribute("SPRING_SECURITY_CONTEXT", sc);
-            UserResponse profile = authService.getProfileByEmail(request.getEmail());
-            authService.updateStatus(profile.getId(), "online");
-            return ResponseEntity.ok(Map.of("message", "Login successful"));
-        } catch (AuthenticationException e) {
+        AuthResult result = authenticationContext.authenticate(AuthRequest.credential(request.getEmail(), request.getPassword()));
+        if (!result.isSuccess()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid credentials"));
         }
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                request.getEmail(), null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        SecurityContext sc = SecurityContextHolder.getContext();
+        sc.setAuthentication(auth);
+        HttpSession session = httpRequest.getSession(true);
+        session.setAttribute("SPRING_SECURITY_CONTEXT", sc);
+        authService.updateStatus(result.getUserId(), "online");
+        return ResponseEntity.ok(Map.of("message", "Login successful"));
     }
 
     @PostMapping("/logout")
